@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -43,8 +43,11 @@ class VideoSSLModel(VideoClassificationModel):
   hidden_dim: int = 2048
   hidden_layer_num: int = 3
   projection_dim: int = 128
-  hidden_norm_activation: common.NormActivation = common.NormActivation(
-      use_sync_bn=False, norm_momentum=0.997, norm_epsilon=1.0e-05)
+  hidden_norm_activation: common.NormActivation = dataclasses.field(
+      default_factory=lambda: common.NormActivation(
+          use_sync_bn=False, norm_momentum=0.997, norm_epsilon=1.0e-05
+      )
+  )
 
 
 @dataclasses.dataclass
@@ -55,21 +58,31 @@ class SSLLosses(Losses):
 
 @dataclasses.dataclass
 class VideoSSLPretrainTask(VideoClassificationTask):
-  model: VideoSSLModel = VideoSSLModel()
-  losses: SSLLosses = SSLLosses()
-  train_data: DataConfig = DataConfig(is_training=True, drop_remainder=True)
-  validation_data: DataConfig = DataConfig(
-      is_training=False, drop_remainder=False)
-  losses: SSLLosses = SSLLosses()
+  model: VideoSSLModel = dataclasses.field(default_factory=VideoSSLModel)
+  losses: SSLLosses = dataclasses.field(default_factory=SSLLosses)
+  train_data: DataConfig = dataclasses.field(
+      default_factory=lambda: DataConfig(is_training=True, drop_remainder=True)
+  )
+  validation_data: DataConfig = dataclasses.field(
+      default_factory=lambda: DataConfig(  # pylint: disable=g-long-lambda
+          is_training=False, drop_remainder=False
+      )
+  )
+  losses: SSLLosses = dataclasses.field(default_factory=SSLLosses)
 
 
 @dataclasses.dataclass
 class VideoSSLEvalTask(VideoClassificationTask):
-  model: VideoSSLModel = VideoSSLModel()
-  train_data: DataConfig = DataConfig(is_training=True, drop_remainder=True)
-  validation_data: DataConfig = DataConfig(
-      is_training=False, drop_remainder=False)
-  losses: SSLLosses = SSLLosses()
+  model: VideoSSLModel = dataclasses.field(default_factory=VideoSSLModel)
+  train_data: DataConfig = dataclasses.field(
+      default_factory=lambda: DataConfig(is_training=True, drop_remainder=True)
+  )
+  validation_data: DataConfig = dataclasses.field(
+      default_factory=lambda: DataConfig(  # pylint: disable=g-long-lambda
+          is_training=False, drop_remainder=False
+      )
+  )
+  losses: SSLLosses = dataclasses.field(default_factory=SSLLosses)
 
 
 @exp_factory.register_config_factory('video_ssl_pretrain_kinetics400')

@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ from typing import Optional
 
 from absl import logging
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 
 def activation_fn(features: tf.Tensor, act_fn: str):
@@ -73,9 +73,9 @@ def pooling_2d(inputs, pool_type, stride, **kwargs):
   """Perform 2D pooling."""
   if stride > 1:
     if pool_type == 'max':
-      pool_op = tf.keras.layers.MaxPool2D
+      pool_op = tf_keras.layers.MaxPool2D
     elif pool_type == 'avg':
-      pool_op = tf.keras.layers.AveragePooling2D
+      pool_op = tf_keras.layers.AveragePooling2D
     else:
       raise ValueError('Unsurpported pool_type %s' % pool_type)
     output = pool_op(
@@ -250,3 +250,16 @@ def get_shape_from_length(length: int, height: int = 1, width: int = 1):
         f'Invalid sequence length: {length} or shape: ({height, width}).'
     )
   return (input_height, input_width)
+
+
+def absolute_position_encoding(
+    position: tf.Tensor, hidden_size: int, dtype=tf.float32) -> tf.Tensor:
+  """Create absoulte position encoding."""
+  position = tf.cast(position, dtype)
+  half_hid = hidden_size // 2
+  freq_seq = tf.cast(tf.range(half_hid), dtype=dtype)
+  inv_freq = 1 / (10000 ** (freq_seq / half_hid))
+  sinusoid = tf.einsum('S,D->SD', position, inv_freq)
+  sin = tf.sin(sinusoid)
+  cos = tf.cos(sinusoid)
+  return tf.concat([sin, cos], axis=-1)

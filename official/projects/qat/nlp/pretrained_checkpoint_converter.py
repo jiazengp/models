@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,11 +15,9 @@
 """A converter for BERT pretrained checkpoint to QAT BERT checkpoint."""
 import tempfile
 
-# Import libraries
-
 from absl import app
 from absl import flags
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.common import registry_imports  # pylint: disable=unused-import
 from official.core import exp_factory

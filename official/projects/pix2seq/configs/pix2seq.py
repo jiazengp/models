@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ from official.core import config_definitions as cfg
 from official.core import exp_factory
 from official.modeling import hyperparams
 from official.modeling import optimization
+from official.projects.uvit.configs import backbones as uvit_backbones
 from official.vision.configs import backbones
 from official.vision.configs import common
 
@@ -67,7 +68,9 @@ class DataConfig(cfg.DataConfig):
   global_batch_size: int = 0
   is_training: bool = False
   dtype: str = 'float32'
-  decoder: common.DataDecoder = common.DataDecoder()
+  decoder: common.DataDecoder = dataclasses.field(
+      default_factory=common.DataDecoder
+  )
   shuffle_buffer_size: int = 10000
   file_type: str = 'tfrecord'
   drop_remainder: bool = True
@@ -85,35 +88,93 @@ class Losses(hyperparams.Config):
 
 
 @dataclasses.dataclass
+class Backbone(backbones.Backbone):
+  """Configuration for backbones.
+
+  Attributes:
+    type: "str", type of backbone be used, one the of fields below.
+    uvit: uvit backbone config.
+  """
+  type: Optional[str] = None
+  resnet: backbones.ResNet = dataclasses.field(default_factory=backbones.ResNet)
+  uvit: uvit_backbones.VisionTransformer = dataclasses.field(
+      default_factory=uvit_backbones.VisionTransformer)
+
+
+@dataclasses.dataclass
+class BackboneConfig(hyperparams.Config):
+  """Configuration for backbones."""
+
+  backbone: Backbone = dataclasses.field(default_factory=Backbone)
+  # Whether to freeze this backbone during training.
+  freeze: bool = False
+  # The endpoint name of the features to extract from the backbone.
+  endpoint_name: str = '5'
+  norm_activation: common.NormActivation = dataclasses.field(
+      default_factory=common.NormActivation
+  )
+  # Optional checkpoint to load for this backbone.
+  init_checkpoint: Optional[str] = None
+  # If loading an init_checkpoint, whether to assert that all objects in the
+  # Python program are matched by the checkpoint.
+  # If False, understand that only the weak assertion of a non-trivial match
+  # will be made.
+  assert_existing_objects_matched: bool = True
+
+
+@dataclasses.dataclass
 class Pix2Seq(hyperparams.Config):
-  """Pix2Seq model definations."""
+  """Pix2Seq model definitions."""
 
   max_num_instances: int = 100
   hidden_size: int = 256
+  num_heads: int = 8
   num_encoder_layers: int = 6
   num_decoder_layers: int = 6
   vocab_size: int = 3000
   use_cls_token: bool = False
   shared_decoder_embedding: bool = True
   decoder_output_bias: bool = True
+  # The shape of the input image. For example, [640, 640, 3] for RGB.
+  # If using multiple backbones, this input size is understood to be the same
+  # for all backbones. If you need a separate input size for each backbone,
+  # please implement this behavior.
   input_size: List[int] = dataclasses.field(default_factory=list)
-  backbone: backbones.Backbone = backbones.Backbone(
-      type='resnet', resnet=backbones.ResNet(model_id=50, bn_trainable=False)
+  # Backbones for each image modality. The RGB backbone is always the first one.
+  # If just using RGB, you should only set one backbone.
+  backbones: List[BackboneConfig] = dataclasses.field(
+      default_factory=lambda: [  # pylint: disable=g-long-lambda
+          BackboneConfig(
+              backbone=Backbone(
+                  type='resnet',
+                  resnet=backbones.ResNet(model_id=50, bn_trainable=False),
+              )
+          )
+      ]
   )
-  norm_activation: common.NormActivation = common.NormActivation()
-  backbone_endpoint_name: str = '5'
   drop_path: float = 0.1
+  # The dropout rates applied to the features extracted from each backbone.
+  encoded_feature_dropout_rates: List[float] = dataclasses.field(
+      default_factory=lambda: [0.1]
+  )
+  # The dropout rate for the transformer.
   drop_units: float = 0.1
   drop_att: float = 0.0
   norm_first: bool = True
+  temperature: float = 1.0
+  top_k: int = 0
+  top_p: float = 0.4
+  early_stopping_token: int | None = None
 
 
 @dataclasses.dataclass
 class Pix2SeqTask(cfg.TaskConfig):
-  model: Pix2Seq = Pix2Seq()
-  train_data: cfg.DataConfig = cfg.DataConfig()
-  validation_data: cfg.DataConfig = cfg.DataConfig()
-  losses: Losses = Losses()
+  model: Pix2Seq = dataclasses.field(default_factory=Pix2Seq)
+  train_data: cfg.DataConfig = dataclasses.field(default_factory=cfg.DataConfig)
+  validation_data: cfg.DataConfig = dataclasses.field(
+      default_factory=cfg.DataConfig
+  )
+  losses: Losses = dataclasses.field(default_factory=Losses)
   init_checkpoint: Optional[str] = None
   init_checkpoint_modules: Union[str, List[str]] = 'all'  # all, backbone
   annotation_file: Optional[str] = None
@@ -143,13 +204,18 @@ def pix2seq_r50_coco() -> cfg.ExperimentConfig:
           ),
           model=Pix2Seq(
               input_size=[640, 640, 3],
-              norm_activation=common.NormActivation(
-                  norm_momentum=0.9,
-                  norm_epsilon=1e-5,
-                  use_sync_bn=True),
-              backbone=backbones.Backbone(
-                  type='resnet', resnet=backbones.ResNet(model_id=50)
-              ),
+              backbones=[
+                  BackboneConfig(
+                      backbone=Backbone(
+                          type='resnet',
+                          resnet=backbones.ResNet(model_id=50),
+                      ),
+                      norm_activation=common.NormActivation(
+                          norm_momentum=0.9, norm_epsilon=1e-5, use_sync_bn=True
+                      ),
+                      init_checkpoint='',
+                  )
+              ],
           ),
           losses=Losses(l2_weight_decay=0.0),
           train_data=DataConfig(
@@ -159,7 +225,7 @@ def pix2seq_r50_coco() -> cfg.ExperimentConfig:
               shuffle_buffer_size=train_batch_size * 10,
               aug_scale_min=0.3,
               aug_scale_max=2.0,
-              aug_color_jitter_strength=0.0
+              aug_color_jitter_strength=0.0,
           ),
           validation_data=DataConfig(
               input_path=os.path.join(COCO_INPUT_PATH_BASE, 'val*'),

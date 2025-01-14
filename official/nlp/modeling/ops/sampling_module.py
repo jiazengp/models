@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ import abc
 from typing import Any, Callable, Dict, Optional
 
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.nlp.modeling.ops import decoding_module
 
@@ -60,7 +60,7 @@ def sample_top_k(logits, top_k):
   top_k_logits = tf.math.top_k(logits, k=top_k)
   indices_to_remove = logits < tf.expand_dims(top_k_logits[0][..., -1], -1)
   top_k_logits = set_tensor_by_indices_to_value(logits, indices_to_remove,
-                                                np.NINF)
+                                                -np.inf)
   return top_k_logits
 
 
@@ -103,7 +103,7 @@ def sample_top_p(logits, top_p):
   indices_to_remove = scatter_values_on_batch_indices(sorted_indices_to_remove,
                                                       sorted_indices)
   top_p_logits = set_tensor_by_indices_to_value(logits, indices_to_remove,
-                                                np.NINF)
+                                                -np.inf)
   return top_p_logits
 
 

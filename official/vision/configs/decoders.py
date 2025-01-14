@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
 """Decoders configurations."""
 import dataclasses
 from typing import List, Optional
-
-# Import libraries
 
 from official.modeling import hyperparams
 
@@ -66,7 +64,7 @@ class Decoder(hyperparams.OneOfConfig):
     fpn: fpn config.
   """
   type: Optional[str] = None
-  fpn: FPN = FPN()
-  nasfpn: NASFPN = NASFPN()
-  identity: Identity = Identity()
-  aspp: ASPP = ASPP()
+  fpn: FPN = dataclasses.field(default_factory=FPN)
+  nasfpn: NASFPN = dataclasses.field(default_factory=NASFPN)
+  identity: Identity = dataclasses.field(default_factory=Identity)
+  aspp: ASPP = dataclasses.field(default_factory=ASPP)

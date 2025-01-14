@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,14 +17,14 @@
 from typing import Any, List, Mapping, Optional, Tuple
 
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.projects.pointpillars.modeling import layers
 from official.projects.pointpillars.utils import utils
 
 
-@tf.keras.utils.register_keras_serializable(package='Vision')
-class Featurizer(tf.keras.layers.Layer):
+@tf_keras.utils.register_keras_serializable(package='Vision')
+class Featurizer(tf_keras.layers.Layer):
   """The featurizer to convert pillars to a BEV pseudo image.
 
   The implementation is from the network architecture of PointPillars
@@ -49,7 +49,7 @@ class Featurizer(tf.keras.layers.Layer):
       eval_batch_size: int,
       num_blocks: int,
       num_channels: int,
-      kernel_regularizer: Optional[tf.keras.regularizers.Regularizer] = None,
+      kernel_regularizer: Optional[tf_keras.regularizers.Regularizer] = None,
       **kwargs):
     """Initialize the featurizer.
 
@@ -60,7 +60,7 @@ class Featurizer(tf.keras.layers.Layer):
       eval_batch_size: An `int` evaluation batch size per replica.
       num_blocks: An `int` number of blocks for extracting features.
       num_channels: An `int` number channels of the BEV image.
-      kernel_regularizer: A `tf.keras.regularizers.Regularizer` object for
+      kernel_regularizer: A `tf_keras.regularizers.Regularizer` object for
         block layers. Default to None.
       **kwargs: Additional keyword arguments to be passed.
     """
@@ -109,7 +109,7 @@ class Featurizer(tf.keras.layers.Layer):
     batch_dims = tf.expand_dims(batch_dims, axis=-1)
     return batch_dims
 
-  def _get_batch_size_and_dims(self,
+  def _get_batch_size_and_dims(self,  # pytype: disable=annotation-type-mismatch
                                training: bool = None) -> Tuple[int, tf.Tensor]:
     # We use training as a ternary indicator, None for test mode.
     # Test mode will be used for saving model and model inference.
@@ -125,7 +125,7 @@ class Featurizer(tf.keras.layers.Layer):
         batch_dims = self._eval_batch_dims
     return batch_size, batch_dims
 
-  def call(self,
+  def call(self,  # pytype: disable=annotation-type-mismatch
            pillars: tf.Tensor,
            indices: tf.Tensor,
            training: bool = None) -> tf.Tensor:
@@ -158,7 +158,7 @@ class Featurizer(tf.keras.layers.Layer):
     return self._config_dict
 
   @classmethod
-  def from_config(cls, config: Mapping[str, Any]) -> tf.keras.Model:
+  def from_config(cls, config: Mapping[str, Any]) -> tf_keras.Model:
     return cls(**config)
 
   @property

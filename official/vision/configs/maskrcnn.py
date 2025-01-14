@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -46,6 +46,18 @@ class Parser(hyperparams.Config):
   rpn_batch_size_per_im: int = 256
   rpn_fg_fraction: float = 0.5
   mask_crop_size: int = 112
+  pad: bool = True  # Only support `pad = True`.
+  keep_aspect_ratio: bool = True  # Only support `keep_aspect_ratio = True`.
+
+  def __post_init__(self, *args, **kwargs):
+    """Validates the configuration."""
+    if not self.pad:
+      raise ValueError('`maskrcnn.Parser` only supports `pad = True`.')
+    if not self.keep_aspect_ratio:
+      raise ValueError(
+          '`maskrcnn.Parser` only supports `keep_aspect_ratio = True`.'
+      )
+    super().__post_init__(*args, **kwargs)
 
 
 @dataclasses.dataclass
@@ -56,8 +68,10 @@ class DataConfig(cfg.DataConfig):
   global_batch_size: int = 0
   is_training: bool = False
   dtype: str = 'bfloat16'
-  decoder: common.DataDecoder = common.DataDecoder()
-  parser: Parser = Parser()
+  decoder: common.DataDecoder = dataclasses.field(
+      default_factory=common.DataDecoder
+  )
+  parser: Parser = dataclasses.field(default_factory=Parser)
   shuffle_buffer_size: int = 10000
   file_type: str = 'tfrecord'
   drop_remainder: bool = True
@@ -166,26 +180,39 @@ class MaskRCNN(hyperparams.Config):
   input_size: List[int] = dataclasses.field(default_factory=list)
   min_level: int = 2
   max_level: int = 6
-  anchor: Anchor = Anchor()
+  anchor: Anchor = dataclasses.field(default_factory=Anchor)
   include_mask: bool = True
   outer_boxes_scale: float = 1.0
-  backbone: backbones.Backbone = backbones.Backbone(
-      type='resnet', resnet=backbones.ResNet())
-  decoder: decoders.Decoder = decoders.Decoder(
-      type='fpn', fpn=decoders.FPN())
-  rpn_head: RPNHead = RPNHead()
-  detection_head: DetectionHead = DetectionHead()
-  roi_generator: ROIGenerator = ROIGenerator()
-  roi_sampler: ROISampler = ROISampler()
-  roi_aligner: ROIAligner = ROIAligner()
-  detection_generator: DetectionGenerator = DetectionGenerator()
-  mask_head: Optional[MaskHead] = MaskHead()
-  mask_sampler: Optional[MaskSampler] = MaskSampler()
-  mask_roi_aligner: Optional[MaskROIAligner] = MaskROIAligner()
-  norm_activation: common.NormActivation = common.NormActivation(
-      norm_momentum=0.997,
-      norm_epsilon=0.0001,
-      use_sync_bn=True)
+  backbone: backbones.Backbone = dataclasses.field(
+      default_factory=lambda: backbones.Backbone(
+          type='resnet', resnet=backbones.ResNet()
+      )
+  )
+  decoder: decoders.Decoder = dataclasses.field(
+      default_factory=lambda: decoders.Decoder(type='fpn', fpn=decoders.FPN())
+  )
+  rpn_head: RPNHead = dataclasses.field(default_factory=RPNHead)
+  detection_head: DetectionHead = dataclasses.field(
+      default_factory=DetectionHead
+  )
+  roi_generator: ROIGenerator = dataclasses.field(default_factory=ROIGenerator)
+  roi_sampler: ROISampler = dataclasses.field(default_factory=ROISampler)
+  roi_aligner: ROIAligner = dataclasses.field(default_factory=ROIAligner)
+  detection_generator: DetectionGenerator = dataclasses.field(
+      default_factory=DetectionGenerator
+  )
+  mask_head: Optional[MaskHead] = dataclasses.field(default_factory=MaskHead)
+  mask_sampler: Optional[MaskSampler] = dataclasses.field(
+      default_factory=MaskSampler
+  )
+  mask_roi_aligner: Optional[MaskROIAligner] = dataclasses.field(
+      default_factory=MaskROIAligner
+  )
+  norm_activation: common.NormActivation = dataclasses.field(
+      default_factory=lambda: common.NormActivation(  # pylint: disable=g-long-lambda
+          norm_momentum=0.997, norm_epsilon=0.0001, use_sync_bn=True
+      )
+  )
 
 
 @dataclasses.dataclass
@@ -201,15 +228,21 @@ class Losses(hyperparams.Config):
   frcnn_class_weight: float = 1.0
   frcnn_box_weight: float = 1.0
   mask_weight: float = 1.0
+  class_weights: Optional[List[float]] = None
 
 
 @dataclasses.dataclass
 class MaskRCNNTask(cfg.TaskConfig):
-  model: MaskRCNN = MaskRCNN()
-  train_data: DataConfig = DataConfig(is_training=True)
-  validation_data: DataConfig = DataConfig(is_training=False,
-                                           drop_remainder=False)
-  losses: Losses = Losses()
+  model: MaskRCNN = dataclasses.field(default_factory=MaskRCNN)
+  train_data: DataConfig = dataclasses.field(
+      default_factory=lambda: DataConfig(is_training=True)
+  )
+  validation_data: DataConfig = dataclasses.field(
+      default_factory=lambda: DataConfig(  # pylint: disable=g-long-lambda
+          is_training=False, drop_remainder=False
+      )
+  )
+  losses: Losses = dataclasses.field(default_factory=Losses)
   init_checkpoint: Optional[str] = None
   init_checkpoint_modules: Union[
       str, List[str]] = 'all'  # all, backbone, and/or decoder

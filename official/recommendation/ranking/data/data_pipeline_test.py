@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 """Unit tests for data_pipeline."""
 
 from absl.testing import parameterized
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.recommendation.ranking.configs import config
 from official.recommendation.ranking.data import data_pipeline
@@ -23,19 +23,29 @@ from official.recommendation.ranking.data import data_pipeline
 
 class DataPipelineTest(parameterized.TestCase, tf.test.TestCase):
 
-  @parameterized.named_parameters(('Train', True),
-                                  ('Eval', False))
-  def testSyntheticDataPipeline(self, is_training):
+  @parameterized.named_parameters(
+      ('TrainCached', True, True),
+      ('EvalNotCached', False, False),
+      ('TrainNotCached', True, False),
+      ('EvalCached', False, True),
+  )
+  def testSyntheticDataPipeline(self, is_training, use_cached_data):
     task = config.Task(
         model=config.ModelConfig(
             embedding_dim=4,
             num_dense_features=8,
             vocab_sizes=[40, 12, 11, 13, 2, 5],
             bottom_mlp=[64, 32, 4],
-            top_mlp=[64, 32, 1]),
-        train_data=config.DataConfig(global_batch_size=16),
-        validation_data=config.DataConfig(global_batch_size=16),
-        use_synthetic_data=True)
+            top_mlp=[64, 32, 1],
+        ),
+        train_data=config.DataConfig(
+            global_batch_size=16, use_cached_data=use_cached_data
+        ),
+        validation_data=config.DataConfig(
+            global_batch_size=16, use_cached_data=use_cached_data
+        ),
+        use_synthetic_data=True,
+    )
 
     num_dense_features = task.model.num_dense_features
     num_sparse_features = len(task.model.vocab_sizes)

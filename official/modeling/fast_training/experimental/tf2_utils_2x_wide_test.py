@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 """Tests for tf2_utils_2x_wide."""
 
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.modeling.fast_training.experimental import tf2_utils_2x_wide
 
@@ -71,19 +71,44 @@ class Tf2Utils2XWideTest(tf.test.TestCase):
     o1 = np.matmul(x, w1)
     self.assertAllClose(o0, np.sum(o1.reshape(2, 2), axis=-1))
 
+  def test_relations(self):
+    x = np.array([10, 11])
+    w = np.random.rand(2, 2)
+    # matmul(x, w) == matmul(expand_vector(x), expand_1_axis(w, axis=0))
+    lhs = np.matmul(x, w)
+    rhs = np.matmul(
+        tf2_utils_2x_wide.expand_vector(x),
+        tf2_utils_2x_wide.expand_1_axis(w, epsilon=0.1, axis=0),
+    )
+    self.assertAllClose(lhs, rhs)
+    # expand_vector(matmul(x, w)) ==
+    # 2 * matmul(x, expand_1_axis(w, epsilon=0.0, axis=-1))
+    lhs = tf2_utils_2x_wide.expand_vector(np.matmul(x, w))
+    rhs = 2 * np.matmul(
+        x, tf2_utils_2x_wide.expand_1_axis(w, epsilon=0.0, axis=-1)
+    )
+    self.assertAllClose(lhs, rhs)
+    # expand_vector(matmul(x, w)) == matmul(expand_vector(x), expand_2_axes(w))
+    lhs = tf2_utils_2x_wide.expand_vector(np.matmul(x, w))
+    rhs = np.matmul(
+        tf2_utils_2x_wide.expand_vector(x),
+        tf2_utils_2x_wide.expand_2_axes(w, epsilon=0.1),
+    )
+    self.assertAllClose(lhs, rhs)
+
   def test_end_to_end(self):
     """Covers expand_vector, expand_2_axes, and expand_1_axis."""
-    model_narrow = tf.keras.Sequential()
-    model_narrow.add(tf.keras.Input(shape=(3,)))
-    model_narrow.add(tf.keras.layers.Dense(4))
-    model_narrow.add(tf.keras.layers.Dense(4))
-    model_narrow.add(tf.keras.layers.Dense(1))
+    model_narrow = tf_keras.Sequential()
+    model_narrow.add(tf_keras.Input(shape=(3,)))
+    model_narrow.add(tf_keras.layers.Dense(4))
+    model_narrow.add(tf_keras.layers.Dense(4))
+    model_narrow.add(tf_keras.layers.Dense(1))
 
-    model_wide = tf.keras.Sequential()
-    model_wide.add(tf.keras.Input(shape=(6,)))
-    model_wide.add(tf.keras.layers.Dense(8))
-    model_wide.add(tf.keras.layers.Dense(8))
-    model_wide.add(tf.keras.layers.Dense(1))
+    model_wide = tf_keras.Sequential()
+    model_wide.add(tf_keras.Input(shape=(6,)))
+    model_wide.add(tf_keras.layers.Dense(8))
+    model_wide.add(tf_keras.layers.Dense(8))
+    model_wide.add(tf_keras.layers.Dense(1))
 
     x0 = np.array([[1, 2, 3]])
     x1 = np.array([[1, 1, 2, 2, 3, 3]])

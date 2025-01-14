@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,10 +14,8 @@
 
 """Tests for configs.py."""
 
-# Import libraries
-
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 import tensorflow_model_optimization as tfmot
 
@@ -69,7 +67,7 @@ class _TestHelper(object):
 class Default8BitQuantizeConfigTest(tf.test.TestCase, _TestHelper):
 
   def _simple_dense_layer(self):
-    layer = tf.keras.layers.Dense(2)
+    layer = tf_keras.layers.Dense(2)
     layer.build(input_shape=(3,))
     return layer
 
@@ -97,7 +95,7 @@ class Default8BitQuantizeConfigTest(tf.test.TestCase, _TestHelper):
 
   def testSetsQuantizeWeights(self):
     layer = self._simple_dense_layer()
-    quantize_kernel = tf.keras.backend.variable(
+    quantize_kernel = tf_keras.backend.variable(
         np.ones(layer.kernel.shape.as_list()))
 
     quantize_config = configs.Default8BitQuantizeConfig(
@@ -108,7 +106,7 @@ class Default8BitQuantizeConfigTest(tf.test.TestCase, _TestHelper):
 
   def testSetsQuantizeActivations(self):
     layer = self._simple_dense_layer()
-    quantize_activation = tf.keras.activations.relu
+    quantize_activation = tf_keras.activations.relu
 
     quantize_config = configs.Default8BitQuantizeConfig(
         ['kernel'], ['activation'], False)
@@ -118,7 +116,7 @@ class Default8BitQuantizeConfigTest(tf.test.TestCase, _TestHelper):
 
   def testSetsQuantizeWeights_ErrorOnWrongNumberOfWeights(self):
     layer = self._simple_dense_layer()
-    quantize_kernel = tf.keras.backend.variable(
+    quantize_kernel = tf_keras.backend.variable(
         np.ones(layer.kernel.shape.as_list()))
 
     quantize_config = configs.Default8BitQuantizeConfig(
@@ -133,7 +131,7 @@ class Default8BitQuantizeConfigTest(tf.test.TestCase, _TestHelper):
 
   def testSetsQuantizeWeights_ErrorOnWrongShapeOfWeight(self):
     layer = self._simple_dense_layer()
-    quantize_kernel = tf.keras.backend.variable(np.ones([1, 2]))
+    quantize_kernel = tf_keras.backend.variable(np.ones([1, 2]))
 
     quantize_config = configs.Default8BitQuantizeConfig(
         ['kernel'], ['activation'], False)
@@ -143,7 +141,7 @@ class Default8BitQuantizeConfigTest(tf.test.TestCase, _TestHelper):
 
   def testSetsQuantizeActivations_ErrorOnWrongNumberOfActivations(self):
     layer = self._simple_dense_layer()
-    quantize_activation = tf.keras.activations.relu
+    quantize_activation = tf_keras.activations.relu
 
     quantize_config = configs.Default8BitQuantizeConfig(
         ['kernel'], ['activation'], False)

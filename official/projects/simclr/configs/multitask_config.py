@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,8 +31,9 @@ class SimCLRMTHeadConfig(hyperparams.Config):
   """Per-task specific configs."""
   task_name: str = 'task_name'
   # Supervised head is required for finetune, but optional for pretrain.
-  supervised_head: simclr_configs.SupervisedHead = simclr_configs.SupervisedHead(
-      num_classes=1001)
+  supervised_head: simclr_configs.SupervisedHead = dataclasses.field(
+      default_factory=lambda: simclr_configs.SupervisedHead(num_classes=1001)
+  )
   mode: str = simclr_model.PRETRAIN
 
 
@@ -40,13 +41,22 @@ class SimCLRMTHeadConfig(hyperparams.Config):
 class SimCLRMTModelConfig(hyperparams.Config):
   """Model config for multi-task SimCLR model."""
   input_size: List[int] = dataclasses.field(default_factory=list)
-  backbone: backbones.Backbone = backbones.Backbone(
-      type='resnet', resnet=backbones.ResNet())
+  backbone: backbones.Backbone = dataclasses.field(
+      default_factory=lambda: backbones.Backbone(  # pylint: disable=g-long-lambda
+          type='resnet', resnet=backbones.ResNet()
+      )
+  )
   backbone_trainable: bool = True
-  projection_head: simclr_configs.ProjectionHead = simclr_configs.ProjectionHead(
-      proj_output_dim=128, num_proj_layers=3, ft_proj_idx=1)
-  norm_activation: common.NormActivation = common.NormActivation(
-      norm_momentum=0.9, norm_epsilon=1e-5, use_sync_bn=False)
+  projection_head: simclr_configs.ProjectionHead = dataclasses.field(
+      default_factory=lambda: simclr_configs.ProjectionHead(  # pylint: disable=g-long-lambda
+          proj_output_dim=128, num_proj_layers=3, ft_proj_idx=1
+      )
+  )
+  norm_activation: common.NormActivation = dataclasses.field(
+      default_factory=lambda: common.NormActivation(  # pylint: disable=g-long-lambda
+          norm_momentum=0.9, norm_epsilon=1e-5, use_sync_bn=False
+      )
+  )
   heads: Tuple[SimCLRMTHeadConfig, ...] = ()
   # L2 weight decay is used in the model, not in task.
   # Note that this can not be used together with lars optimizer.

@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,16 +16,14 @@
 
 from typing import Any, Dict, List, Mapping, Optional, Union
 
-# Import libraries
-
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.modeling import tf_utils
 
 
-@tf.keras.utils.register_keras_serializable(package='Vision')
-class RetinaNetHead(tf.keras.layers.Layer):
+@tf_keras.utils.register_keras_serializable(package='Vision')
+class RetinaNetHead(tf_keras.layers.Layer):
   """Creates a RetinaNet head."""
 
   def __init__(
@@ -33,7 +31,7 @@ class RetinaNetHead(tf.keras.layers.Layer):
       min_level: int,
       max_level: int,
       num_classes: int,
-      num_anchors_per_location: int,
+      num_anchors_per_location: int | dict[str, int],
       num_convs: int = 4,
       num_filters: int = 256,
       attribute_heads: Optional[List[Dict[str, Any]]] = None,
@@ -43,8 +41,8 @@ class RetinaNetHead(tf.keras.layers.Layer):
       use_sync_bn: bool = False,
       norm_momentum: float = 0.99,
       norm_epsilon: float = 0.001,
-      kernel_regularizer: Optional[tf.keras.regularizers.Regularizer] = None,
-      bias_regularizer: Optional[tf.keras.regularizers.Regularizer] = None,
+      kernel_regularizer: Optional[tf_keras.regularizers.Regularizer] = None,
+      bias_regularizer: Optional[tf_keras.regularizers.Regularizer] = None,
       num_params_per_anchor: int = 4,
       share_level_convs: bool = True,
       **kwargs,
@@ -55,7 +53,9 @@ class RetinaNetHead(tf.keras.layers.Layer):
       min_level: An `int` number of minimum feature level.
       max_level: An `int` number of maximum feature level.
       num_classes: An `int` number of classes to predict.
-      num_anchors_per_location: An `int` number of anchors per pixel location.
+      num_anchors_per_location: Number of anchors per pixel location. If an
+        `int`, the same number is used for all levels. If a `dict`, it specifies
+        the number at each level.
       num_convs: An `int` number that represents the number of the intermediate
         conv layers before the prediction.
       num_filters: An `int` number that represents the number of filters of the
@@ -75,9 +75,9 @@ class RetinaNetHead(tf.keras.layers.Layer):
         normalization across different replicas.
       norm_momentum: A `float` of normalization momentum for the moving average.
       norm_epsilon: A `float` added to variance to avoid dividing by zero.
-      kernel_regularizer: A `tf.keras.regularizers.Regularizer` object for
+      kernel_regularizer: A `tf_keras.regularizers.Regularizer` object for
         Conv2D. Default is None.
-      bias_regularizer: A `tf.keras.regularizers.Regularizer` object for Conv2D.
+      bias_regularizer: A `tf_keras.regularizers.Regularizer` object for Conv2D.
       num_params_per_anchor: Number of parameters required to specify an anchor
         box. For example, `num_params_per_anchor` would be 4 for axis-aligned
         anchor boxes specified by their y-centers, x-centers, heights, and
@@ -108,7 +108,7 @@ class RetinaNetHead(tf.keras.layers.Layer):
         'share_level_convs': share_level_convs,
     }
 
-    if tf.keras.backend.image_data_format() == 'channels_last':
+    if tf_keras.backend.image_data_format() == 'channels_last':
       self._bn_axis = -1
     else:
       self._bn_axis = 1
@@ -123,7 +123,7 @@ class RetinaNetHead(tf.keras.layers.Layer):
     }
     if not self._config_dict['use_separable_conv']:
       self._conv_kwargs.update({
-          'kernel_initializer': tf.keras.initializers.RandomNormal(stddev=0.01),
+          'kernel_initializer': tf_keras.initializers.RandomNormal(stddev=0.01),
           'kernel_regularizer': self._config_dict['kernel_regularizer'],
       })
 
@@ -134,34 +134,68 @@ class RetinaNetHead(tf.keras.layers.Layer):
     }
 
     self._classifier_kwargs = {
-        'filters': (
-            self._config_dict['num_classes']
-            * self._config_dict['num_anchors_per_location']
-        ),
         'kernel_size': 3,
         'padding': 'same',
         'bias_initializer': tf.constant_initializer(-np.log((1 - 0.01) / 0.01)),
         'bias_regularizer': self._config_dict['bias_regularizer'],
     }
-    if not self._config_dict['use_separable_conv']:
+    if isinstance(self._config_dict['num_anchors_per_location'], dict):
+      self._classifier_kwargs['filters'] = {
+          level: v * self._config_dict['num_classes']
+          for level, v in self._config_dict['num_anchors_per_location'].items()
+      }
+    else:
+      self._classifier_kwargs['filters'] = (
+          self._config_dict['num_classes']
+          * self._config_dict['num_anchors_per_location']
+      )
+    if self._config_dict['use_separable_conv']:
       self._classifier_kwargs.update({
-          'kernel_initializer': tf.keras.initializers.RandomNormal(stddev=1e-5),
+          'depthwise_initializer': tf_keras.initializers.RandomNormal(
+              stddev=0.03
+          ),
+          'depthwise_regularizer': self._config_dict['kernel_regularizer'],
+          'pointwise_initializer': tf_keras.initializers.RandomNormal(
+              stddev=0.03
+          ),
+          'pointwise_regularizer': self._config_dict['kernel_regularizer'],
+      })
+    else:
+      self._classifier_kwargs.update({
+          'kernel_initializer': tf_keras.initializers.RandomNormal(stddev=1e-5),
           'kernel_regularizer': self._config_dict['kernel_regularizer'],
       })
 
     self._box_regressor_kwargs = {
-        'filters': (
-            self._config_dict['num_params_per_anchor']
-            * self._config_dict['num_anchors_per_location']
-        ),
         'kernel_size': 3,
         'padding': 'same',
         'bias_initializer': tf.zeros_initializer(),
         'bias_regularizer': self._config_dict['bias_regularizer'],
     }
-    if not self._config_dict['use_separable_conv']:
+    if isinstance(self._config_dict['num_anchors_per_location'], dict):
+      self._box_regressor_kwargs['filters'] = {
+          level: v * self._config_dict['num_params_per_anchor']
+          for level, v in self._config_dict['num_anchors_per_location'].items()
+      }
+    else:
+      self._box_regressor_kwargs['filters'] = (
+          self._config_dict['num_params_per_anchor']
+          * self._config_dict['num_anchors_per_location']
+      )
+    if self._config_dict['use_separable_conv']:
       self._box_regressor_kwargs.update({
-          'kernel_initializer': tf.keras.initializers.RandomNormal(stddev=1e-5),
+          'depthwise_initializer': tf_keras.initializers.RandomNormal(
+              stddev=0.03
+          ),
+          'depthwise_regularizer': self._config_dict['kernel_regularizer'],
+          'pointwise_initializer': tf_keras.initializers.RandomNormal(
+              stddev=0.03
+          ),
+          'pointwise_regularizer': self._config_dict['kernel_regularizer'],
+      })
+    else:
+      self._box_regressor_kwargs.update({
+          'kernel_initializer': tf_keras.initializers.RandomNormal(stddev=1e-5),
           'kernel_regularizer': self._config_dict['kernel_regularizer'],
       })
 
@@ -172,6 +206,14 @@ class RetinaNetHead(tf.keras.layers.Layer):
     if 'kernel_initializer' in conv_kwargs:
       conv_kwargs['kernel_initializer'] = tf_utils.clone_initializer(
           conv_kwargs['kernel_initializer']
+      )
+    if 'pointwise_initializer' in conv_kwargs:
+      conv_kwargs['pointwise_initializer'] = tf_utils.clone_initializer(
+          conv_kwargs['pointwise_initializer']
+      )
+    if 'depthwise_initializer' in conv_kwargs:
+      conv_kwargs['depthwise_initializer'] = tf_utils.clone_initializer(
+          conv_kwargs['depthwise_initializer']
       )
     return conv_kwargs
 
@@ -217,7 +259,7 @@ class RetinaNetHead(tf.keras.layers.Layer):
 
       if not self._config_dict['use_separable_conv']:
         att_predictor_kwargs.update({
-            'kernel_initializer': tf.keras.initializers.RandomNormal(
+            'kernel_initializer': tf_keras.initializers.RandomNormal(
                 stddev=1e-5
             ),
             'kernel_regularizer': self._config_dict['kernel_regularizer'],
@@ -311,8 +353,16 @@ class RetinaNetHead(tf.keras.layers.Layer):
       for level in range(
           self._config_dict['min_level'], self._config_dict['max_level'] + 1
       ):
+        predictor_kwargs_level = predictor_kwargs.copy()
+        if isinstance(predictor_kwargs_level['filters'], dict):
+          predictor_kwargs_level['filters'] = predictor_kwargs_level['filters'][
+              str(level)
+          ]
+        predictor_kwargs_level = self._conv_kwargs_new_kernel_init(
+            predictor_kwargs_level
+        )
         predictors.append(
-            conv_op(name=f'{predictor_name}-{level}', **predictor_kwargs)
+            conv_op(name=f'{predictor_name}-{level}', **predictor_kwargs_level)
         )
 
     return convs, norms, predictors
@@ -368,14 +418,14 @@ class RetinaNetHead(tf.keras.layers.Layer):
   def build(self, input_shape: Union[tf.TensorShape, List[tf.TensorShape]]):
     """Creates the variables of the head."""
     conv_op = (
-        tf.keras.layers.SeparableConv2D
+        tf_keras.layers.SeparableConv2D
         if self._config_dict['use_separable_conv']
-        else tf.keras.layers.Conv2D
+        else tf_keras.layers.Conv2D
     )
     bn_op = (
-        tf.keras.layers.experimental.SyncBatchNormalization
+        tf_keras.layers.experimental.SyncBatchNormalization
         if self._config_dict['use_sync_bn']
-        else tf.keras.layers.BatchNormalization
+        else tf_keras.layers.BatchNormalization
     )
 
     # Class net.
@@ -484,8 +534,8 @@ class RetinaNetHead(tf.keras.layers.Layer):
     return cls(**config)
 
 
-@tf.keras.utils.register_keras_serializable(package='Vision')
-class RPNHead(tf.keras.layers.Layer):
+@tf_keras.utils.register_keras_serializable(package='Vision')
+class RPNHead(tf_keras.layers.Layer):
   """Creates a Region Proposal Network (RPN) head."""
 
   def __init__(
@@ -500,8 +550,8 @@ class RPNHead(tf.keras.layers.Layer):
       use_sync_bn: bool = False,
       norm_momentum: float = 0.99,
       norm_epsilon: float = 0.001,
-      kernel_regularizer: Optional[tf.keras.regularizers.Regularizer] = None,
-      bias_regularizer: Optional[tf.keras.regularizers.Regularizer] = None,
+      kernel_regularizer: Optional[tf_keras.regularizers.Regularizer] = None,
+      bias_regularizer: Optional[tf_keras.regularizers.Regularizer] = None,
       **kwargs):
     """Initializes a Region Proposal Network head.
 
@@ -522,9 +572,9 @@ class RPNHead(tf.keras.layers.Layer):
         normalization across different replicas.
       norm_momentum: A `float` of normalization momentum for the moving average.
       norm_epsilon: A `float` added to variance to avoid dividing by zero.
-      kernel_regularizer: A `tf.keras.regularizers.Regularizer` object for
+      kernel_regularizer: A `tf_keras.regularizers.Regularizer` object for
         Conv2D. Default is None.
-      bias_regularizer: A `tf.keras.regularizers.Regularizer` object for Conv2D.
+      bias_regularizer: A `tf_keras.regularizers.Regularizer` object for Conv2D.
       **kwargs: Additional keyword arguments to be passed.
     """
     super(RPNHead, self).__init__(**kwargs)
@@ -543,7 +593,7 @@ class RPNHead(tf.keras.layers.Layer):
         'bias_regularizer': bias_regularizer,
     }
 
-    if tf.keras.backend.image_data_format() == 'channels_last':
+    if tf_keras.backend.image_data_format() == 'channels_last':
       self._bn_axis = -1
     else:
       self._bn_axis = 1
@@ -551,9 +601,9 @@ class RPNHead(tf.keras.layers.Layer):
 
   def build(self, input_shape):
     """Creates the variables of the head."""
-    conv_op = (tf.keras.layers.SeparableConv2D
+    conv_op = (tf_keras.layers.SeparableConv2D
                if self._config_dict['use_separable_conv']
-               else tf.keras.layers.Conv2D)
+               else tf_keras.layers.Conv2D)
     conv_kwargs = {
         'filters': self._config_dict['num_filters'],
         'kernel_size': 3,
@@ -563,13 +613,13 @@ class RPNHead(tf.keras.layers.Layer):
     }
     if not self._config_dict['use_separable_conv']:
       conv_kwargs.update({
-          'kernel_initializer': tf.keras.initializers.RandomNormal(
+          'kernel_initializer': tf_keras.initializers.RandomNormal(
               stddev=0.01),
           'kernel_regularizer': self._config_dict['kernel_regularizer'],
       })
-    bn_op = (tf.keras.layers.experimental.SyncBatchNormalization
+    bn_op = (tf_keras.layers.experimental.SyncBatchNormalization
              if self._config_dict['use_sync_bn']
-             else tf.keras.layers.BatchNormalization)
+             else tf_keras.layers.BatchNormalization)
     bn_kwargs = {
         'axis': self._bn_axis,
         'momentum': self._config_dict['norm_momentum'],
@@ -601,7 +651,7 @@ class RPNHead(tf.keras.layers.Layer):
     }
     if not self._config_dict['use_separable_conv']:
       classifier_kwargs.update({
-          'kernel_initializer': tf.keras.initializers.RandomNormal(
+          'kernel_initializer': tf_keras.initializers.RandomNormal(
               stddev=1e-5),
           'kernel_regularizer': self._config_dict['kernel_regularizer'],
       })
@@ -616,7 +666,7 @@ class RPNHead(tf.keras.layers.Layer):
     }
     if not self._config_dict['use_separable_conv']:
       box_regressor_kwargs.update({
-          'kernel_initializer': tf.keras.initializers.RandomNormal(
+          'kernel_initializer': tf_keras.initializers.RandomNormal(
               stddev=1e-5),
           'kernel_regularizer': self._config_dict['kernel_regularizer'],
       })

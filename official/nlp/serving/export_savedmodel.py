@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -106,7 +106,7 @@ def create_export_module(*, task_name: Text, config_file: Text,
 
   @dataclasses.dataclass
   class Dummy(base_config.Config):
-    task: task_config_cls = task_config_cls()
+    task: task_config_cls = dataclasses.field(default_factory=task_config_cls)
 
   dummy_exp = Dummy()
   dummy_exp = hyperparams.override_params_dict(

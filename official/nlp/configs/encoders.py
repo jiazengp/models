@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,10 +17,10 @@
 Includes configurations and factory methods.
 """
 import dataclasses
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Union
 
 import gin
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.modeling import hyperparams
 from official.modeling import tf_utils
@@ -47,8 +47,36 @@ class BertEncoderConfig(hyperparams.Config):
   output_range: Optional[int] = None
   return_all_encoder_outputs: bool = False
   return_attention_scores: bool = False
+  return_word_embeddings: bool = False
   # Pre/Post-LN Transformer
   norm_first: bool = False
+
+
+@dataclasses.dataclass
+class FunnelEncoderConfig(hyperparams.Config):
+  """Funnel encoder configuration."""
+  vocab_size: int = 30522
+  hidden_size: int = 768
+  num_layers: int = 12
+  num_attention_heads: int = 12
+  max_position_embeddings: int = 512
+  type_vocab_size: int = 16
+  inner_dim: int = 3072
+  hidden_activation: str = "gelu"
+  approx_gelu: bool = True
+  dropout_rate: float = 0.1
+  attention_dropout_rate: float = 0.1
+  pool_type: str = "max"
+  pool_stride: Union[int, Sequence[Union[int, float]]] = 2
+  unpool_length: int = 0
+  initializer_range: float = 0.02
+  output_range: Optional[int] = None
+  embedding_width: Optional[int] = None
+  embedding_layer: Optional[tf_keras.layers.Layer] = None
+  norm_first: bool = False
+  share_rezero: bool = False
+  append_dense_inputs: bool = False
+  transformer_cls: str = "TransformerEncoderBlock"
 
 
 @dataclasses.dataclass
@@ -295,24 +323,47 @@ class SparseMixerEncoderConfig(hyperparams.Config):
 class EncoderConfig(hyperparams.OneOfConfig):
   """Encoder configuration."""
   type: Optional[str] = "bert"
-  albert: AlbertEncoderConfig = AlbertEncoderConfig()
-  bert: BertEncoderConfig = BertEncoderConfig()
-  bert_v2: BertEncoderConfig = BertEncoderConfig()
-  bigbird: BigBirdEncoderConfig = BigBirdEncoderConfig()
-  kernel: KernelEncoderConfig = KernelEncoderConfig()
-  mobilebert: MobileBertEncoderConfig = MobileBertEncoderConfig()
-  reuse: ReuseEncoderConfig = ReuseEncoderConfig()
-  xlnet: XLNetEncoderConfig = XLNetEncoderConfig()
-  query_bert: QueryBertConfig = QueryBertConfig()
-  fnet: FNetEncoderConfig = FNetEncoderConfig()
-  sparse_mixer: SparseMixerEncoderConfig = SparseMixerEncoderConfig()
+  albert: AlbertEncoderConfig = dataclasses.field(
+      default_factory=AlbertEncoderConfig
+  )
+  bert: BertEncoderConfig = dataclasses.field(default_factory=BertEncoderConfig)
+  bert_v2: BertEncoderConfig = dataclasses.field(
+      default_factory=BertEncoderConfig
+  )
+  bigbird: BigBirdEncoderConfig = dataclasses.field(
+      default_factory=BigBirdEncoderConfig
+  )
+  funnel: FunnelEncoderConfig = dataclasses.field(
+      default_factory=FunnelEncoderConfig
+  )
+  kernel: KernelEncoderConfig = dataclasses.field(
+      default_factory=KernelEncoderConfig
+  )
+  mobilebert: MobileBertEncoderConfig = dataclasses.field(
+      default_factory=MobileBertEncoderConfig
+  )
+  reuse: ReuseEncoderConfig = dataclasses.field(
+      default_factory=ReuseEncoderConfig
+  )
+  xlnet: XLNetEncoderConfig = dataclasses.field(
+      default_factory=XLNetEncoderConfig
+  )
+  query_bert: QueryBertConfig = dataclasses.field(
+      default_factory=QueryBertConfig
+  )
+  fnet: FNetEncoderConfig = dataclasses.field(default_factory=FNetEncoderConfig)
+  sparse_mixer: SparseMixerEncoderConfig = dataclasses.field(
+      default_factory=SparseMixerEncoderConfig
+  )
   # If `any` is used, the encoder building relies on any.BUILDER.
-  any: hyperparams.Config = hyperparams.Config()
+  any: hyperparams.Config = dataclasses.field(
+      default_factory=hyperparams.Config
+  )
 
 
 @gin.configurable
 def build_encoder(config: EncoderConfig,
-                  embedding_layer: Optional[tf.keras.layers.Layer] = None,
+                  embedding_layer: Optional[tf_keras.layers.Layer] = None,
                   encoder_cls=None,
                   bypass_config: bool = False):
   """Instantiate a Transformer encoder network from EncoderConfig.
@@ -339,7 +390,7 @@ def build_encoder(config: EncoderConfig,
         type_vocab_size=encoder_cfg.type_vocab_size,
         hidden_size=encoder_cfg.hidden_size,
         max_seq_length=encoder_cfg.max_position_embeddings,
-        initializer=tf.keras.initializers.TruncatedNormal(
+        initializer=tf_keras.initializers.TruncatedNormal(
             stddev=encoder_cfg.initializer_range),
         dropout_rate=encoder_cfg.dropout_rate,
     )
@@ -350,7 +401,7 @@ def build_encoder(config: EncoderConfig,
             encoder_cfg.hidden_activation),
         dropout_rate=encoder_cfg.dropout_rate,
         attention_dropout_rate=encoder_cfg.attention_dropout_rate,
-        kernel_initializer=tf.keras.initializers.TruncatedNormal(
+        kernel_initializer=tf_keras.initializers.TruncatedNormal(
             stddev=encoder_cfg.initializer_range),
     )
     kwargs = dict(
@@ -358,7 +409,7 @@ def build_encoder(config: EncoderConfig,
         hidden_cfg=hidden_cfg,
         num_hidden_instances=encoder_cfg.num_layers,
         pooled_output_dim=encoder_cfg.hidden_size,
-        pooler_layer_initializer=tf.keras.initializers.TruncatedNormal(
+        pooler_layer_initializer=tf_keras.initializers.TruncatedNormal(
             stddev=encoder_cfg.initializer_range),
         return_all_layer_outputs=encoder_cfg.return_all_encoder_outputs,
         dict_outputs=True)
@@ -367,10 +418,10 @@ def build_encoder(config: EncoderConfig,
   if encoder_type == "any":
     encoder = encoder_cfg.BUILDER(encoder_cfg)
     if not isinstance(encoder,
-                      (tf.Module, tf.keras.Model, tf.keras.layers.Layer)):
+                      (tf.Module, tf_keras.Model, tf_keras.layers.Layer)):
       raise ValueError("The BUILDER returns an unexpected instance. The "
                        "`build_encoder` should returns a tf.Module, "
-                       "tf.keras.Model or tf.keras.layers.Layer. However, "
+                       "tf_keras.Model or tf_keras.layers.Layer. However, "
                        f"we get {encoder.__class__}")
     return encoder
 
@@ -409,7 +460,7 @@ def build_encoder(config: EncoderConfig,
         activation=tf_utils.get_activation(encoder_cfg.hidden_activation),
         dropout_rate=encoder_cfg.dropout_rate,
         attention_dropout_rate=encoder_cfg.attention_dropout_rate,
-        initializer=tf.keras.initializers.TruncatedNormal(
+        initializer=tf_keras.initializers.TruncatedNormal(
             stddev=encoder_cfg.initializer_range),
         dict_outputs=True)
 
@@ -430,7 +481,7 @@ def build_encoder(config: EncoderConfig,
           block_size=encoder_cfg.block_size,
           max_position_embeddings=encoder_cfg.max_position_embeddings,
           type_vocab_size=encoder_cfg.type_vocab_size,
-          initializer=tf.keras.initializers.TruncatedNormal(
+          initializer=tf_keras.initializers.TruncatedNormal(
               stddev=encoder_cfg.initializer_range),
           embedding_width=encoder_cfg.embedding_width,
           use_gradient_checkpointing=encoder_cfg.use_gradient_checkpointing)
@@ -439,13 +490,13 @@ def build_encoder(config: EncoderConfig,
         type_vocab_size=encoder_cfg.type_vocab_size,
         hidden_size=encoder_cfg.hidden_size,
         max_seq_length=encoder_cfg.max_position_embeddings,
-        initializer=tf.keras.initializers.TruncatedNormal(
+        initializer=tf_keras.initializers.TruncatedNormal(
             stddev=encoder_cfg.initializer_range),
         dropout_rate=encoder_cfg.dropout_rate)
     attention_cfg = dict(
         num_heads=encoder_cfg.num_attention_heads,
         key_dim=int(encoder_cfg.hidden_size // encoder_cfg.num_attention_heads),
-        kernel_initializer=tf.keras.initializers.TruncatedNormal(
+        kernel_initializer=tf_keras.initializers.TruncatedNormal(
             stddev=encoder_cfg.initializer_range),
         max_rand_mask_length=encoder_cfg.max_position_embeddings,
         num_rand_blocks=encoder_cfg.num_rand_blocks,
@@ -460,7 +511,7 @@ def build_encoder(config: EncoderConfig,
         dropout_rate=encoder_cfg.dropout_rate,
         attention_dropout_rate=encoder_cfg.attention_dropout_rate,
         norm_first=encoder_cfg.norm_first,
-        kernel_initializer=tf.keras.initializers.TruncatedNormal(
+        kernel_initializer=tf_keras.initializers.TruncatedNormal(
             stddev=encoder_cfg.initializer_range),
         attention_cls=layers.BigBirdAttention,
         attention_cfg=attention_cfg)
@@ -472,12 +523,46 @@ def build_encoder(config: EncoderConfig,
         mask_cls=layers.BigBirdMasks,
         mask_cfg=dict(block_size=encoder_cfg.block_size),
         pooled_output_dim=encoder_cfg.hidden_size,
-        pooler_layer_initializer=tf.keras.initializers.TruncatedNormal(
+        pooler_layer_initializer=tf_keras.initializers.TruncatedNormal(
             stddev=encoder_cfg.initializer_range),
         return_all_layer_outputs=False,
         dict_outputs=True,
         layer_idx_as_attention_seed=True)
     return networks.EncoderScaffold(**kwargs)
+
+  if encoder_type == "funnel":
+
+    if encoder_cfg.hidden_activation == "gelu":
+      activation = tf_utils.get_activation(
+          encoder_cfg.hidden_activation,
+          approximate=encoder_cfg.approx_gelu)
+    else:
+      activation = tf_utils.get_activation(encoder_cfg.hidden_activation)
+
+    return networks.FunnelTransformerEncoder(
+        vocab_size=encoder_cfg.vocab_size,
+        hidden_size=encoder_cfg.hidden_size,
+        num_layers=encoder_cfg.num_layers,
+        num_attention_heads=encoder_cfg.num_attention_heads,
+        max_sequence_length=encoder_cfg.max_position_embeddings,
+        type_vocab_size=encoder_cfg.type_vocab_size,
+        inner_dim=encoder_cfg.inner_dim,
+        inner_activation=activation,
+        output_dropout=encoder_cfg.dropout_rate,
+        attention_dropout=encoder_cfg.attention_dropout_rate,
+        pool_type=encoder_cfg.pool_type,
+        pool_stride=encoder_cfg.pool_stride,
+        unpool_length=encoder_cfg.unpool_length,
+        initializer=tf_keras.initializers.TruncatedNormal(
+            stddev=encoder_cfg.initializer_range),
+        output_range=encoder_cfg.output_range,
+        embedding_width=encoder_cfg.embedding_width,
+        embedding_layer=embedding_layer,
+        norm_first=encoder_cfg.norm_first,
+        share_rezero=encoder_cfg.share_rezero,
+        append_dense_inputs=encoder_cfg.append_dense_inputs,
+        transformer_cls=encoder_cfg.transformer_cls,
+        )
 
   if encoder_type == "kernel":
     embedding_cfg = dict(
@@ -485,13 +570,13 @@ def build_encoder(config: EncoderConfig,
         type_vocab_size=encoder_cfg.type_vocab_size,
         hidden_size=encoder_cfg.hidden_size,
         max_seq_length=encoder_cfg.max_position_embeddings,
-        initializer=tf.keras.initializers.TruncatedNormal(
+        initializer=tf_keras.initializers.TruncatedNormal(
             stddev=encoder_cfg.initializer_range),
         dropout_rate=encoder_cfg.dropout_rate)
     attention_cfg = dict(
         num_heads=encoder_cfg.num_attention_heads,
         key_dim=int(encoder_cfg.hidden_size // encoder_cfg.num_attention_heads),
-        kernel_initializer=tf.keras.initializers.TruncatedNormal(
+        kernel_initializer=tf_keras.initializers.TruncatedNormal(
             stddev=encoder_cfg.initializer_range),
         feature_transform=encoder_cfg.feature_transform,
         num_random_features=encoder_cfg.num_random_features,
@@ -508,7 +593,7 @@ def build_encoder(config: EncoderConfig,
         dropout_rate=encoder_cfg.dropout_rate,
         attention_dropout_rate=encoder_cfg.attention_dropout_rate,
         norm_first=encoder_cfg.norm_first,
-        kernel_initializer=tf.keras.initializers.TruncatedNormal(
+        kernel_initializer=tf_keras.initializers.TruncatedNormal(
             stddev=encoder_cfg.initializer_range),
         attention_cls=layers.KernelAttention,
         attention_cfg=attention_cfg)
@@ -519,7 +604,7 @@ def build_encoder(config: EncoderConfig,
         num_hidden_instances=encoder_cfg.num_layers,
         mask_cls=layers.KernelMask,
         pooled_output_dim=encoder_cfg.hidden_size,
-        pooler_layer_initializer=tf.keras.initializers.TruncatedNormal(
+        pooler_layer_initializer=tf_keras.initializers.TruncatedNormal(
             stddev=encoder_cfg.initializer_range),
         return_all_layer_outputs=False,
         dict_outputs=True,
@@ -546,7 +631,7 @@ def build_encoder(config: EncoderConfig,
         inner_activation=encoder_cfg.inner_activation,
         use_cls_mask=encoder_cfg.use_cls_mask,
         embedding_width=encoder_cfg.embedding_width,
-        initializer=tf.keras.initializers.RandomNormal(
+        initializer=tf_keras.initializers.RandomNormal(
             stddev=encoder_cfg.initializer_range))
 
   if encoder_type == "reuse":
@@ -555,7 +640,7 @@ def build_encoder(config: EncoderConfig,
         type_vocab_size=encoder_cfg.type_vocab_size,
         hidden_size=encoder_cfg.hidden_size,
         max_seq_length=encoder_cfg.max_position_embeddings,
-        initializer=tf.keras.initializers.TruncatedNormal(
+        initializer=tf_keras.initializers.TruncatedNormal(
             stddev=encoder_cfg.initializer_range),
         dropout_rate=encoder_cfg.dropout_rate)
     hidden_cfg = dict(
@@ -566,7 +651,7 @@ def build_encoder(config: EncoderConfig,
         output_dropout=encoder_cfg.dropout_rate,
         attention_dropout=encoder_cfg.attention_dropout_rate,
         norm_first=encoder_cfg.norm_first,
-        kernel_initializer=tf.keras.initializers.TruncatedNormal(
+        kernel_initializer=tf_keras.initializers.TruncatedNormal(
             stddev=encoder_cfg.initializer_range),
         reuse_attention=encoder_cfg.reuse_attention,
         use_relative_pe=encoder_cfg.use_relative_pe,
@@ -578,7 +663,7 @@ def build_encoder(config: EncoderConfig,
         hidden_cfg=hidden_cfg,
         num_hidden_instances=encoder_cfg.num_layers,
         pooled_output_dim=encoder_cfg.hidden_size,
-        pooler_layer_initializer=tf.keras.initializers.TruncatedNormal(
+        pooler_layer_initializer=tf_keras.initializers.TruncatedNormal(
             stddev=encoder_cfg.initializer_range),
         return_all_layer_outputs=False,
         dict_outputs=True,
@@ -591,7 +676,7 @@ def build_encoder(config: EncoderConfig,
         vocab_size=encoder_cfg.vocab_size,
         embedding_width=encoder_cfg.embedding_size,
         output_dim=encoder_cfg.hidden_size,
-        initializer=tf.keras.initializers.TruncatedNormal(
+        initializer=tf_keras.initializers.TruncatedNormal(
             stddev=encoder_cfg.initializer_range),
         name="word_embeddings")
     return networks.BertEncoderV2(
@@ -605,7 +690,7 @@ def build_encoder(config: EncoderConfig,
         attention_dropout_rate=encoder_cfg.attention_dropout_rate,
         max_sequence_length=encoder_cfg.max_position_embeddings,
         type_vocab_size=encoder_cfg.type_vocab_size,
-        initializer=tf.keras.initializers.TruncatedNormal(
+        initializer=tf_keras.initializers.TruncatedNormal(
             stddev=encoder_cfg.initializer_range),
         output_range=encoder_cfg.output_range,
         embedding_layer=embedding_layer,
@@ -626,7 +711,7 @@ def build_encoder(config: EncoderConfig,
         attention_dropout=encoder_cfg.attention_dropout,
         max_sequence_length=encoder_cfg.max_sequence_length,
         type_vocab_size=encoder_cfg.type_vocab_size,
-        initializer=tf.keras.initializers.TruncatedNormal(
+        initializer=tf_keras.initializers.TruncatedNormal(
             stddev=encoder_cfg.initializer_range),
         output_range=encoder_cfg.output_range,
         embedding_width=encoder_cfg.embedding_width,
@@ -654,7 +739,7 @@ def build_encoder(config: EncoderConfig,
         inner_activation=tf_utils.get_activation(encoder_cfg.inner_activation),
         output_dropout=encoder_cfg.output_dropout,
         attention_dropout=encoder_cfg.attention_dropout,
-        initializer=tf.keras.initializers.TruncatedNormal(
+        initializer=tf_keras.initializers.TruncatedNormal(
             stddev=encoder_cfg.initializer_range),
         output_range=encoder_cfg.output_range,
         embedding_width=encoder_cfg.embedding_width,
@@ -678,12 +763,13 @@ def build_encoder(config: EncoderConfig,
       attention_dropout_rate=encoder_cfg.attention_dropout_rate,
       max_sequence_length=encoder_cfg.max_position_embeddings,
       type_vocab_size=encoder_cfg.type_vocab_size,
-      initializer=tf.keras.initializers.TruncatedNormal(
+      initializer=tf_keras.initializers.TruncatedNormal(
           stddev=encoder_cfg.initializer_range),
       output_range=encoder_cfg.output_range,
       embedding_width=encoder_cfg.embedding_size,
       embedding_layer=embedding_layer,
       return_all_encoder_outputs=encoder_cfg.return_all_encoder_outputs,
       return_attention_scores=encoder_cfg.return_attention_scores,
+      return_word_embeddings=encoder_cfg.return_word_embeddings,
       dict_outputs=True,
       norm_first=encoder_cfg.norm_first)

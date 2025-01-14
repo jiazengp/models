@@ -1,18 +1,21 @@
 # TF-Vision Model Garden
 
-⚠️ Disclaimer: All datasets hyperlinked from this page are not owned or
-distributed by Google. The dataset is made available by third parties.
-Please review the terms and conditions made available by the third parties
-before using the data.
-
 ⚠️ Disclaimer: Checkpoints are based on training with publicly available
 datasets. Some datasets contain limitations, including non-commercial use
-limitations. Please review terms and conditions made available by third parties
-before using models and datasets provided.
+limitations. Please review the terms and conditions made available by third parties
+before using the datasets provided. Checkpoints are licensed under
+[Apache 2.0](https://github.com/tensorflow/models/blob/master/LICENSE).
+
+⚠️ Disclaimer: Datasets hyperlinked from this page are not owned or distributed
+by Google. Such datasets are made available by third parties. Please review the
+terms and conditions made available by the third parties before using the data.
 
 ## Table of Contents
 
 - [Introduction](#introduction)
+- [Backbones](#backbones)
+- [Decoders](#decoders)
+- [Heads](#heads)
 - [Image Classification](#image-classification)
   * [ResNet models trained with vanilla settings](#resnet-models-trained-with-vanilla-settings)
   * [ResNet-RS models trained with various settings](#resnet-rs-models-trained-with-various-settings)
@@ -23,6 +26,7 @@ before using models and datasets provided.
   * [RetinaNet (ImageNet pretrained)](#RetinaNet-ImageNet-pretrained)
   * [RetinaNet (Trained from scratch)](#RetinaNet-Trained-from-scratch)
   * [Mobile-size RetinaNet (Trained from scratch)](#Mobile-size-RetinaNet-Trained-from-scratch))
+  * [YOLOv7 (Trained from scratch)](#yolov7-trained-from-scratch)
 - [Instance Segmentation Baselines](#Instance-Segmentation-Baselines)
   * [Mask R-CNN (Trained from scratch)](#Mask-R-CNN-Trained-from-scratch)
   * [Cascade RCNN-RS (Trained from scratch)](#Cascade-RCNN-RS-Trained-from-scratch)
@@ -39,6 +43,40 @@ before using models and datasets provided.
 TF-Vision modeling library for computer vision provides a collection of
 baselines and checkpoints for image classification, object detection, and
 segmentation.
+
+## Backbones
+
+| Backbones        |
+| ---------------- |
+| [DilatedResNet](https://www.tensorflow.org/api_docs/python/tfm/vision/backbones/DilatedResNet)    |
+| [EfficientNet](https://www.tensorflow.org/api_docs/python/tfm/vision/backbones/EfficientNet)    |
+| [MobileDet](https://www.tensorflow.org/api_docs/python/tfm/vision/backbones/MobileDet)    |
+| [MobileNet](https://www.tensorflow.org/api_docs/python/tfm/vision/backbones/MobileNet)    |
+| [ResNet](https://www.tensorflow.org/api_docs/python/tfm/vision/backbones/ResNet)    |
+| [ResNet3D](https://www.tensorflow.org/api_docs/python/tfm/vision/backbones/ResNet3D)    |
+| [RevNet](https://www.tensorflow.org/api_docs/python/tfm/vision/backbones/RevNet)    |
+| [SpineNet](https://www.tensorflow.org/api_docs/python/tfm/vision/backbones/SpineNet)    |
+| [SpineNetMobile](https://www.tensorflow.org/api_docs/python/tfm/vision/backbones/SpineNetMobile)    |
+| [VisionTransformer](https://www.tensorflow.org/api_docs/python/tfm/vision/backbones/VisionTransformer)    |
+
+## Decoders
+
+| Decoders        |
+| --------------- |
+| [ASPP](https://www.tensorflow.org/api_docs/python/tfm/vision/decoders/ASPP)    |
+| [FPN](https://www.tensorflow.org/api_docs/python/tfm/vision/decoders/FPN)    |
+| [NASFPN](https://www.tensorflow.org/api_docs/python/tfm/vision/decoders/NASFPN)    |
+
+## Heads
+
+| Heads           |
+| --------------- |
+| [DetectionHead](https://www.tensorflow.org/api_docs/python/tfm/vision/heads/DetectionHead)    |
+| [MaskHead](https://www.tensorflow.org/api_docs/python/tfm/vision/heads/MaskHead)    |
+| [MaskScoring](https://www.tensorflow.org/api_docs/python/tfm/vision/heads/MaskScoring)    |
+| [RPNHead](https://www.tensorflow.org/api_docs/python/tfm/vision/heads/RPNHead)    |
+| [RetinaNetHead](https://www.tensorflow.org/api_docs/python/tfm/vision/heads/RetinaNetHead)    |
+| [SegmentationHead](https://www.tensorflow.org/api_docs/python/tfm/vision/heads/SegmentationHead)    |
 
 ## Image Classification
 
@@ -123,6 +161,15 @@ ViT-l16  | 224x224    | 82.2  | 95.8  | [ckpt](https://storage.googleapis.com/tf
         [Cascade RCNN-RS](https://arxiv.org/abs/2107.00057)
 *   Models are all trained on [COCO](https://cocodataset.org/) train2017 and
     evaluated on [COCO](https://cocodataset.org/) val2017.
+    *   The checkpoints were trained on annotations
+    [owned and licensed by the COCO Consortium](https://cocodataset.org/#termsofuse)
+    under a
+    [Creative Commons Attribution 4.0 License](https://creativecommons.org/licenses/by/4.0/legalcode).
+    *   The COCO Consortium does not own the copyright of the images
+    corresponding to the annotations. The images are
+    [made available by Flickr](https://www.flickr.com/creativecommons/) under
+    various Creative Commons licenses, and users of the images accept full
+    responsibility for the use of the dataset.
 *   Training details:
     *   Models finetuned from [ImageNet](https://www.image-net.org/) pretrained
         checkpoints adopt the 12 or 36 epochs schedule. Models trained from
@@ -175,6 +222,16 @@ training features including:
 | ----------- | :--------: | -----: | --------: | ---------: | -----: | --------:|
 | MobileNetv2 | 256x256    | 600    | -         | 2.27       | 23.5   | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/retinanet/coco_mobilenetv2_tpu.yaml) |
 | Mobile SpineNet-49  | 384x384    | 600    | 1.0      | 2.32       | 28.1   | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/retinanet/coco_spinenet49_mobile_tpu.yaml) \| [ckpt](https://storage.googleapis.com/tf_model_garden/vision/retinanet/spinenet49mobile.tar.gz) |
+
+</details>
+
+### YOLOv7 (Trained from scratch)
+
+<details>
+
+| Variant    | Resolution | Epochs | FLOPs (B) | Params (M) | Box AP | Download |
+| ----------- | :--------: | -----: | --------: | ---------: | -----: | --------:|
+| YOLOv7 | 640x640    | 300    | 53.16         | 44.57       | 50.5   | [config](https://github.com/tensorflow/models/blob/master/official/projects/yolo/configs/experiments/yolov7/detection/yolov7.yaml) \| [ckpt](https://storage.googleapis.com/tf_model_garden/vision/yolo/yolov7/yolov7.tar.gz) |
 
 </details>
 

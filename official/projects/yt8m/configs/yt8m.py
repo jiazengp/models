@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -49,10 +49,11 @@ class DataConfig(cfg.DataConfig):
     include_video_id: `True` means include video id (string) in the input to the
       model.
     temporal_stride: Not used. Need to deprecated.
-    sample_random_frames: If sample random frames.
     max_frames: Maxim Number of frames in a input example. It is used to crop
       the input in the temporal dimension.
-    num_sample_frames: Number of frames to sample for each input example.
+    sample_random_frames: If sample random frames or random sequence.
+    num_sample_frames: Number of frames to sample for each input example. No
+      frame sampling if None.
     num_classes: Number of classes to classify. Assuming it is a classification
       task.
     num_devices: Not used. To be deprecated.
@@ -75,9 +76,11 @@ class DataConfig(cfg.DataConfig):
   segment_labels: bool = False
   include_video_id: bool = False
   temporal_stride: int = 1
-  max_frames: int = 300
+  max_frames: int = 300  # Cap input frames.
   sample_random_frames: bool = True
-  num_sample_frames: int = 300  # set smaller to allow random sample (Parser)
+  # Sample random frames if not None. No sampling in inference.
+  num_sample_frames: Optional[int] = 300
+  input_per_feature_l2_norm: bool = False
   prefetch_buffer_size: int = 100
   shuffle_buffer_size: int = 100
   num_classes: int = 3862
@@ -123,7 +126,7 @@ class Backbone(hyperparams.OneOfConfig):
     dbof: dbof backbone config.
   """
   type: Optional[str] = None
-  dbof: DbofModel = DbofModel()
+  dbof: DbofModel = dataclasses.field(default_factory=DbofModel)
 
 
 @dataclasses.dataclass
@@ -152,17 +155,22 @@ class Head(hyperparams.OneOfConfig):
     logistic: Logistic head config.
   """
   type: Optional[str] = None
-  moe: MoeModel = MoeModel()
-  logistic: LogisticModel = LogisticModel()
+  moe: MoeModel = dataclasses.field(default_factory=MoeModel)
+  logistic: LogisticModel = dataclasses.field(default_factory=LogisticModel)
 
 
 @dataclasses.dataclass
 class VideoClassificationModel(hyperparams.Config):
   """The classifier model config."""
-  backbone: Backbone = Backbone(type='dbof')
-  head: Head = Head(type='moe')
-  norm_activation: common.NormActivation = common.NormActivation(
-      activation='relu', use_sync_bn=False)
+  backbone: Backbone = dataclasses.field(
+      default_factory=lambda: Backbone(type='dbof')
+  )
+  head: Head = dataclasses.field(default_factory=lambda: Head(type='moe'))
+  norm_activation: common.NormActivation = dataclasses.field(
+      default_factory=lambda: common.NormActivation(  # pylint: disable=g-long-lambda
+          activation='relu', use_sync_bn=False
+      )
+  )
 
 
 @dataclasses.dataclass
@@ -188,12 +196,21 @@ class Evaluation(hyperparams.Config):
 @dataclasses.dataclass
 class YT8MTask(cfg.TaskConfig):
   """The task config."""
-  model: VideoClassificationModel = VideoClassificationModel()
-  train_data: DataConfig = yt8m(is_training=True)
-  validation_data: DataConfig = yt8m(is_training=False)
-  losses: Losses = Losses()
-  evaluation: Evaluation = Evaluation(
-      average_precision=AveragePrecisionConfig())
+  model: VideoClassificationModel = dataclasses.field(
+      default_factory=VideoClassificationModel
+  )
+  train_data: DataConfig = dataclasses.field(
+      default_factory=lambda: yt8m(is_training=True)
+  )
+  validation_data: DataConfig = dataclasses.field(
+      default_factory=lambda: yt8m(is_training=False)
+  )
+  losses: Losses = dataclasses.field(default_factory=Losses)
+  evaluation: Evaluation = dataclasses.field(
+      default_factory=lambda: Evaluation(  # pylint: disable=g-long-lambda
+          average_precision=AveragePrecisionConfig()
+      )
+  )
   gradient_clip_norm: float = 1.0
 
 

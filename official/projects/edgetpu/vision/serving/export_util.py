@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 import dataclasses
 from typing import List, Optional
 
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 import tensorflow_datasets as tfds
 
 from official.core import exp_factory
@@ -93,7 +93,9 @@ class ExportConfig(base_config.Config):
       For example: --finalize_method=resize128,argmax,resize512,squeeze will do
         resize bilinear to 128x128, then argmax then resize nn to 512x512
   """
-  quantization_config: QuantizationConfig = QuantizationConfig()
+  quantization_config: QuantizationConfig = dataclasses.field(
+      default_factory=QuantizationConfig
+  )
   model_name: Optional[str] = None
   output_layer: Optional[str] = None
   ckpt_path: Optional[str] = None

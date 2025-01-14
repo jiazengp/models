@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,9 +14,8 @@
 
 """Tests for 3D volumeric convoluion blocks."""
 
-# Import libraries
 from absl.testing import parameterized
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.projects.volumetric_models.modeling import nn_blocks_3d
 
@@ -26,7 +25,7 @@ class NNBlocks3DTest(parameterized.TestCase, tf.test.TestCase):
   @parameterized.parameters((128, 128, 32, 1), (256, 256, 16, 2))
   def test_bottleneck_block_3d_volume_creation(self, spatial_size, volume_size,
                                                filters, strides):
-    inputs = tf.keras.Input(
+    inputs = tf_keras.Input(
         shape=(spatial_size, spatial_size, volume_size, filters * 4),
         batch_size=1)
     block = nn_blocks_3d.BottleneckBlock3DVolume(
@@ -46,7 +45,7 @@ class NNBlocks3DTest(parameterized.TestCase, tf.test.TestCase):
   @parameterized.parameters((128, 128, 32, 1), (256, 256, 64, 2))
   def test_residual_block_3d_volume_creation(self, spatial_size, volume_size,
                                              filters, strides):
-    inputs = tf.keras.Input(
+    inputs = tf_keras.Input(
         shape=(spatial_size, spatial_size, volume_size, filters), batch_size=1)
     block = nn_blocks_3d.ResidualBlock3DVolume(
         filters=filters,
@@ -65,7 +64,7 @@ class NNBlocks3DTest(parameterized.TestCase, tf.test.TestCase):
   @parameterized.parameters((128, 128, 64, 1, 3), (256, 256, 128, 2, 1))
   def test_basic_block_3d_volume_creation(self, spatial_size, volume_size,
                                           filters, strides, kernel_size):
-    inputs = tf.keras.Input(
+    inputs = tf_keras.Input(
         shape=(spatial_size, spatial_size, volume_size, filters), batch_size=1)
     block = nn_blocks_3d.BasicBlock3DVolume(
         filters=filters, strides=strides, kernel_size=kernel_size)

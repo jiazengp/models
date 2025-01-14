@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,13 +44,24 @@ class DataConfig(video_classification.DataConfig):
 class ConstCLModel(hyperparams.Config):
   """The model config."""
   model_type: str = 'video_classification'
-  backbone: backbones_3d_cfg.Backbone3D = backbones_3d_cfg.Backbone3D(
-      type='resnet_3dy', resnet_3dy=backbones_3d_cfg.ResNet3DY50())
-  norm_activation: common.NormActivation = common.NormActivation(
-      use_sync_bn=False, norm_momentum=0.9, norm_epsilon=1e-5)
-  global_head: head_cfg.MLP = head_cfg.MLP(
-      use_sync_bn=False, normalize_inputs=False, norm_momentum=0.9)
-  local_head: head_cfg.InstanceReconstructor = head_cfg.InstanceReconstructor()
+  backbone: backbones_3d_cfg.Backbone3D = dataclasses.field(
+      default_factory=lambda: backbones_3d_cfg.Backbone3D(  # pylint: disable=g-long-lambda
+          type='resnet_3dy', resnet_3dy=backbones_3d_cfg.ResNet3DY50()
+      )
+  )
+  norm_activation: common.NormActivation = dataclasses.field(
+      default_factory=lambda: common.NormActivation(  # pylint: disable=g-long-lambda
+          use_sync_bn=False, norm_momentum=0.9, norm_epsilon=1e-5
+      )
+  )
+  global_head: head_cfg.MLP = dataclasses.field(
+      default_factory=lambda: head_cfg.MLP(  # pylint: disable=g-long-lambda
+          use_sync_bn=False, normalize_inputs=False, norm_momentum=0.9
+      )
+  )
+  local_head: head_cfg.InstanceReconstructor = dataclasses.field(
+      default_factory=head_cfg.InstanceReconstructor
+  )
 
 
 @dataclasses.dataclass

@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -45,5 +45,7 @@ class Decoder(hyperparams.OneOfConfig):
     unet_3d_decoder: UNet3D decoder config.
   """
   type: Optional[str] = None
-  identity: Identity = Identity()
-  unet_3d_decoder: UNet3DDecoder = UNet3DDecoder()
+  identity: Identity = dataclasses.field(default_factory=Identity)
+  unet_3d_decoder: UNet3DDecoder = dataclasses.field(
+      default_factory=UNet3DDecoder
+  )

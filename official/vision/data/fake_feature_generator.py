@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -90,7 +90,10 @@ def generate_instance_masks_np(height: int,
 def generate_semantic_mask_np(height: int, width: int,
                               num_classes: int) -> np.ndarray:
   """Returns a fake numpy semantic mask array."""
-  return generate_image_np(height, width, num_channels=1) % num_classes
+  out = generate_image_np(height, width, num_channels=1)
+  if np.iinfo(out.dtype).max > num_classes:
+    out = out % num_classes
+  return out
 
 
 def generate_panoptic_masks_np(

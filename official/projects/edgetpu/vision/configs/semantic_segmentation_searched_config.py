@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,8 +19,6 @@
 import dataclasses
 import os
 from typing import Any, List, Mapping, Optional
-
-# Import libraries
 
 from official.core import config_definitions as cfg
 from official.core import exp_factory
@@ -72,8 +70,10 @@ class AutosegEdgeTPUModelConfig(hyperparams.Config):
   """Autoseg-EdgeTPU segmentation model config."""
   num_classes: int = 0
   input_size: List[int] = dataclasses.field(default_factory=list)
-  backbone: backbones.Backbone = backbones.Backbone()
-  head: BiFPNHeadConfig = BiFPNHeadConfig()
+  backbone: backbones.Backbone = dataclasses.field(
+      default_factory=backbones.Backbone
+  )
+  head: BiFPNHeadConfig = dataclasses.field(default_factory=BiFPNHeadConfig)
   model_params: Mapping[str, Any] = dataclasses.field(
       default_factory=lambda: {  # pylint: disable=g-long-lambda
           'model_name': 'autoseg_edgetpu_backbone_s',
@@ -91,10 +91,16 @@ class AutosegEdgeTPUModelConfig(hyperparams.Config):
 class AutosegEdgeTPUTaskConfig(base_cfg.SemanticSegmentationTask):
   """The task config inherited from the base segmentation task."""
 
-  model: AutosegEdgeTPUModelConfig = AutosegEdgeTPUModelConfig()
-  train_data: base_cfg.DataConfig = base_cfg.DataConfig(is_training=True)
-  validation_data: base_cfg.DataConfig = base_cfg.DataConfig(is_training=False)
-  losses: Losses = Losses()
+  model: AutosegEdgeTPUModelConfig = dataclasses.field(
+      default_factory=AutosegEdgeTPUModelConfig
+  )
+  train_data: base_cfg.DataConfig = dataclasses.field(
+      default_factory=lambda: base_cfg.DataConfig(is_training=True)
+  )
+  validation_data: base_cfg.DataConfig = dataclasses.field(
+      default_factory=lambda: base_cfg.DataConfig(is_training=False)
+  )
+  losses: Losses = dataclasses.field(default_factory=Losses)
   init_checkpoint: Optional[str] = None
   init_checkpoint_modules: str = 'backbone'  # all or backbone
   model_output_keys: Optional[List[int]] = dataclasses.field(
