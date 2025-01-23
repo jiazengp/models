@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ class VisionTransformer(hyperparams.Config):
   representation_size: int = 0
   hidden_size: int = 1
   patch_size: int = 16
-  transformer: Transformer = Transformer()
+  transformer: Transformer = dataclasses.field(default_factory=Transformer)
   init_stochastic_depth_rate: float = 0.0
   original_init: bool = True
   pos_embed_shape: Optional[Tuple[int, int]] = None
@@ -52,6 +52,8 @@ class VisionTransformer(hyperparams.Config):
   layer_scale_init_value: float = 0.0
   # Transformer encoder spatial partition dimensions.
   transformer_partition_dims: Optional[Tuple[int, int, int, int]] = None
+  # If True, output attention scores.
+  output_attention_scores: bool = False
 
 
 @dataclasses.dataclass
@@ -96,6 +98,10 @@ class MobileNet(hyperparams.Config):
   model_id: str = 'MobileNetV2'
   filter_size_scale: float = 1.0
   stochastic_depth_drop_rate: float = 0.0
+  # Whether to apply a fixed and common stochastic depth drop rate to all
+  # blocks, instead to linearly scale it from zero to maximum value (standard
+  # behaviour for stochastic depth). Set to True for backward compatibility.
+  flat_stochastic_depth_drop_rate: bool = True
   output_stride: Optional[int] = None
   output_intermediate_endpoints: bool = False
 
@@ -156,12 +162,16 @@ class Backbone(hyperparams.OneOfConfig):
     vit: vision transformer backbone config.
   """
   type: Optional[str] = None
-  resnet: ResNet = ResNet()
-  dilated_resnet: DilatedResNet = DilatedResNet()
-  revnet: RevNet = RevNet()
-  efficientnet: EfficientNet = EfficientNet()
-  spinenet: SpineNet = SpineNet()
-  spinenet_mobile: SpineNetMobile = SpineNetMobile()
-  mobilenet: MobileNet = MobileNet()
-  mobiledet: MobileDet = MobileDet()
-  vit: VisionTransformer = VisionTransformer()
+  resnet: ResNet = dataclasses.field(default_factory=ResNet)
+  dilated_resnet: DilatedResNet = dataclasses.field(
+      default_factory=DilatedResNet
+  )
+  revnet: RevNet = dataclasses.field(default_factory=RevNet)
+  efficientnet: EfficientNet = dataclasses.field(default_factory=EfficientNet)
+  spinenet: SpineNet = dataclasses.field(default_factory=SpineNet)
+  spinenet_mobile: SpineNetMobile = dataclasses.field(
+      default_factory=SpineNetMobile
+  )
+  mobilenet: MobileNet = dataclasses.field(default_factory=MobileNet)
+  mobiledet: MobileDet = dataclasses.field(default_factory=MobileDet)
+  vit: VisionTransformer = dataclasses.field(default_factory=VisionTransformer)

@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,9 +14,11 @@
 
 """Tests for Keras-based transformer block layer."""
 
+import math
+
 from absl.testing import parameterized
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.nlp.modeling.layers.transformer_encoder_block import TransformerEncoderBlock
 
@@ -27,7 +29,7 @@ class TransformerEncoderBlockLayerTest(
 
   def tearDown(self):
     super(TransformerEncoderBlockLayerTest, self).tearDown()
-    tf.keras.mixed_precision.set_global_policy('float32')
+    tf_keras.mixed_precision.set_global_policy('float32')
 
   def test_layer_creation(self, transformer_cls):
     test_layer = transformer_cls(
@@ -35,7 +37,7 @@ class TransformerEncoderBlockLayerTest(
     sequence_length = 21
     width = 80
     # Create a 3-dimensional input (the first dimension is implicit).
-    data_tensor = tf.keras.Input(shape=(sequence_length, width))
+    data_tensor = tf_keras.Input(shape=(sequence_length, width))
     output_tensor = test_layer(data_tensor)
     # The default output of a transformer layer should be the same as the input.
     self.assertEqual(data_tensor.shape.as_list(), output_tensor.shape.as_list())
@@ -46,9 +48,9 @@ class TransformerEncoderBlockLayerTest(
     sequence_length = 21
     width = 80
     # Create a 3-dimensional input (the first dimension is implicit).
-    data_tensor = tf.keras.Input(shape=(sequence_length, width))
+    data_tensor = tf_keras.Input(shape=(sequence_length, width))
     # Create a 2-dimensional input (the first dimension is implicit).
-    mask_tensor = tf.keras.Input(shape=(sequence_length, sequence_length))
+    mask_tensor = tf_keras.Input(shape=(sequence_length, sequence_length))
     output_tensor = test_layer([data_tensor, mask_tensor])
     # The default output of a transformer layer should be the same as the input.
     self.assertEqual(data_tensor.shape.as_list(), output_tensor.shape.as_list())
@@ -59,11 +61,11 @@ class TransformerEncoderBlockLayerTest(
     sequence_length = 21
     width = 80
     # Create a 3-dimensional input (the first dimension is implicit).
-    data_tensor = tf.keras.Input(shape=(sequence_length, width))
+    data_tensor = tf_keras.Input(shape=(sequence_length, width))
     output_tensor = test_layer(data_tensor)
 
     # Create a model from the test layer.
-    model = tf.keras.Model(data_tensor, output_tensor)
+    model = tf_keras.Model(data_tensor, output_tensor)
 
     # Invoke the model on test data. We can't validate the output data itself
     # (the NN is too complex) but this will rule out structural runtime errors.
@@ -78,13 +80,13 @@ class TransformerEncoderBlockLayerTest(
     sequence_length = 21
     width = 80
     # Create a 3-dimensional input (the first dimension is implicit).
-    data_tensor = tf.keras.Input(shape=(sequence_length, width))
+    data_tensor = tf_keras.Input(shape=(sequence_length, width))
     # Create a 2-dimensional input (the first dimension is implicit).
-    mask_tensor = tf.keras.Input(shape=(sequence_length, sequence_length))
+    mask_tensor = tf_keras.Input(shape=(sequence_length, sequence_length))
     output_tensor = test_layer([data_tensor, mask_tensor])
 
     # Create a model from the test layer.
-    model = tf.keras.Model([data_tensor, mask_tensor], output_tensor)
+    model = tf_keras.Model([data_tensor, mask_tensor], output_tensor)
 
     # Invoke the model on test data. We can't validate the output data itself
     # (the NN is too complex) but this will rule out structural runtime errors.
@@ -185,19 +187,19 @@ class TransformerEncoderBlockLayerTest(
     self.assertAllClose(new_output_tensor, output_tensor, atol=5e-5, rtol=0.003)
 
   def test_layer_invocation_with_float16_dtype(self, transformer_cls):
-    tf.keras.mixed_precision.set_global_policy('mixed_float16')
+    tf_keras.mixed_precision.set_global_policy('mixed_float16')
     test_layer = transformer_cls(
         num_attention_heads=10, inner_dim=2048, inner_activation='relu')
     sequence_length = 21
     width = 80
     # Create a 3-dimensional input (the first dimension is implicit).
-    data_tensor = tf.keras.Input(shape=(sequence_length, width))
+    data_tensor = tf_keras.Input(shape=(sequence_length, width))
     # Create a 2-dimensional input (the first dimension is implicit).
-    mask_tensor = tf.keras.Input(shape=(sequence_length, sequence_length))
+    mask_tensor = tf_keras.Input(shape=(sequence_length, sequence_length))
     output_tensor = test_layer([data_tensor, mask_tensor])
 
     # Create a model from the test layer.
-    model = tf.keras.Model([data_tensor, mask_tensor], output_tensor)
+    model = tf_keras.Model([data_tensor, mask_tensor], output_tensor)
 
     # Invoke the model on test data. We can't validate the output data itself
     # (the NN is too complex) but this will rule out structural runtime errors.
@@ -215,11 +217,11 @@ class TransformerEncoderBlockLayerTest(
         num_attention_heads=10,
         inner_dim=2048,
         inner_activation='relu',
-        kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02))
+        kernel_initializer=tf_keras.initializers.TruncatedNormal(stddev=0.02))
     sequence_length = 21
     width = 80
     # Create a 3-dimensional input (the first dimension is implicit).
-    data_tensor = tf.keras.Input(shape=(sequence_length, width))
+    data_tensor = tf_keras.Input(shape=(sequence_length, width))
     output = test_layer(data_tensor)
     # The default output of a transformer layer should be the same as the input.
     self.assertEqual(data_tensor.shape.as_list(), output.shape.as_list())
@@ -229,12 +231,12 @@ class TransformerEncoderBlockLayerTest(
         num_attention_heads=10,
         inner_dim=2048,
         inner_activation='relu',
-        kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02))
+        kernel_initializer=tf_keras.initializers.TruncatedNormal(stddev=0.02))
     # Create a 3-dimensional input (the first dimension is implicit).
     width = 30
-    input_tensor = tf.keras.Input(shape=(None, width))
+    input_tensor = tf_keras.Input(shape=(None, width))
     output_tensor = test_layer(input_tensor)
-    model = tf.keras.Model(input_tensor, output_tensor)
+    model = tf_keras.Model(input_tensor, output_tensor)
 
     input_length = 17
     input_data = np.ones((1, input_length, width))
@@ -247,7 +249,7 @@ class TransformerEncoderBlockLayerTest(
         num_attention_heads=2,
         inner_dim=128,
         inner_activation='relu',
-        kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02))
+        kernel_initializer=tf_keras.initializers.TruncatedNormal(stddev=0.02))
     # Forward path.
     q_tensor = tf.zeros([2, 4, 16], dtype=tf.float32)
     kv_tensor = tf.zeros([2, 8, 16], dtype=tf.float32)
@@ -262,7 +264,7 @@ class TransformerEncoderBlockLayerTestWithoutParams(
 
   def tearDown(self):
     super(TransformerEncoderBlockLayerTestWithoutParams, self).tearDown()
-    tf.keras.mixed_precision.set_global_policy('float32')
+    tf_keras.mixed_precision.set_global_policy('float32')
 
   def test_raises_invalid_arg_error_when_q_kv_dims_are_different(self):
     test_layer = TransformerEncoderBlock(
@@ -314,9 +316,9 @@ class TransformerEncoderBlockLayerTestWithoutParams(
           inner_dim=128,
           inner_activation='relu',
           norm_first=norm_first)
-      inputs = tf.keras.Input(shape=(None, None, 2))
+      inputs = tf_keras.Input(shape=(None, None, 2))
       outputs = layer(inputs)
-      tf.keras.Model(inputs=inputs, outputs=outputs)
+      tf_keras.Model(inputs=inputs, outputs=outputs)
 
     graph_without_res = tf.Graph()
     with graph_without_res.as_default():
@@ -326,9 +328,9 @@ class TransformerEncoderBlockLayerTestWithoutParams(
           inner_activation='relu',
           norm_first=norm_first,
           use_query_residual=False)
-      inputs = tf.keras.Input(shape=(None, None, 2))
+      inputs = tf_keras.Input(shape=(None, None, 2))
       outputs = layer(inputs)
-      tf.keras.Model(inputs=inputs, outputs=outputs)
+      tf_keras.Model(inputs=inputs, outputs=outputs)
     graph_with_res_names = {x.name for x in graph_with_res.get_operations()}
     graph_without_res_names = {
         x.name for x in graph_without_res.get_operations()
@@ -420,7 +422,29 @@ class TransformerArgumentTest(tf.test.TestCase, parameterized.TestCase):
         norm_first=True,
         norm_epsilon=1e-6,
         inner_dropout=0.1,
-        attention_initializer=tf.keras.initializers.RandomUniform(
+        attention_initializer=tf_keras.initializers.RandomUniform(
+            minval=0., maxval=1.))
+    # Forward path.
+    dummy_tensor = tf.zeros([2, 4, 16], dtype=tf.float32)
+    dummy_mask = tf.zeros([2, 4, 4], dtype=tf.float32)
+    inputs = [dummy_tensor, dummy_mask]
+    output = encoder_block(inputs)
+    self.assertEqual(output.shape, (2, 4, hidden_size))
+
+  def test_use_rms_norm(self):
+    num_attention_heads = 2
+    hidden_size = 16
+    encoder_block = TransformerEncoderBlock(
+        num_attention_heads=num_attention_heads,
+        inner_dim=32,
+        inner_activation='relu',
+        output_dropout=0.1,
+        attention_dropout=0.1,
+        use_bias=False,
+        use_rms_norm=True,
+        norm_epsilon=1e-6,
+        inner_dropout=0.1,
+        attention_initializer=tf_keras.initializers.RandomUniform(
             minval=0., maxval=1.))
     # Forward path.
     dummy_tensor = tf.zeros([2, 4, 16], dtype=tf.float32)
@@ -573,7 +597,7 @@ class TransformerArgumentTest(tf.test.TestCase, parameterized.TestCase):
         norm_first=True,
         norm_epsilon=1e-6,
         inner_dropout=0.1,
-        attention_initializer=tf.keras.initializers.RandomUniform(
+        attention_initializer=tf_keras.initializers.RandomUniform(
             minval=0., maxval=1.),
         use_query_residual=False,
         key_dim=20,
@@ -603,7 +627,7 @@ class TransformerArgumentTest(tf.test.TestCase, parameterized.TestCase):
     num_cols = 13
     width = 80
     # Create a 3-dimensional input (the first dimension is implicit).
-    data_tensor = tf.keras.Input(shape=(num_rows, num_cols, width))
+    data_tensor = tf_keras.Input(shape=(num_rows, num_cols, width))
     output_tensor = test_layer(data_tensor)
     # The default output of a transformer layer should be the same as the input.
     self.assertEqual(data_tensor.shape.as_list(), output_tensor.shape.as_list())
@@ -637,7 +661,7 @@ class TransformerArgumentTest(tf.test.TestCase, parameterized.TestCase):
         inner_dropout=inner_dropout)
     seq_len = 21
     hidden_size = 512
-    input_tensor = tf.keras.Input(shape=(seq_len, hidden_size))
+    input_tensor = tf_keras.Input(shape=(seq_len, hidden_size))
     _ = test_layer(input_tensor)
 
     true_output_dropout = test_layer._output_dropout.get_config()['rate']
@@ -668,7 +692,7 @@ class TransformerArgumentTest(tf.test.TestCase, parameterized.TestCase):
         inner_activation='relu',
         return_attention_scores=return_attention_scores)
     # Create a 3-dimensional input (the first dimension is implicit).
-    data_tensor = tf.keras.Input(shape=(sequence_length, width))
+    data_tensor = tf_keras.Input(shape=(sequence_length, width))
     output_tensor = test_layer(data_tensor)
 
     expected_layer_output_shape = [None, sequence_length, width]
@@ -689,6 +713,136 @@ class TransformerArgumentTest(tf.test.TestCase, parameterized.TestCase):
       # Only the standard layer output.
       self.assertEqual(output_tensor.shape.as_list(),
                        expected_layer_output_shape)
+
+  @parameterized.named_parameters(
+      ('mqa', 1),
+      ('gqa', 4),
+  )
+  def test_attention_with_kv_heads(self, num_kv_heads):
+    num_attention_heads = 8
+    sequence_length = 21
+    width = 80
+
+    test_layer = TransformerEncoderBlock(
+        num_attention_heads=num_attention_heads,
+        inner_dim=2048,
+        inner_activation='relu',
+        return_attention_scores=True,
+        num_kv_heads=num_kv_heads,
+    )
+    # Create a 3-dimensional input (the first dimension is implicit).
+    data_tensor = tf_keras.Input(shape=(sequence_length, width))
+    output_tensor = test_layer(data_tensor)
+
+    expected_layer_output_shape = [None, sequence_length, width]
+    expected_attention_scores_shape = [
+        None,
+        num_attention_heads,
+        sequence_length,
+        sequence_length,
+    ]
+
+    self.assertIsInstance(output_tensor, tuple)
+    self.assertLen(output_tensor, 2)
+    # First is the standard output.
+    self.assertEqual(
+        output_tensor[0].shape.as_list(), expected_layer_output_shape
+    )
+    # Second is the attention scores.
+    self.assertEqual(
+        output_tensor[1].shape.as_list(), expected_attention_scores_shape
+    )
+
+  @parameterized.named_parameters(
+      ('use_softmax_attn', False),
+      ('use_softmax_attn_mqa', False, 1),
+      ('use_sigmoid_attn', True),
+      ('use_sigmoid_attn_mqa', True, 1),
+  )
+  def test_block_sparse_attention(self, use_sigmoid_attn, num_kv_heads=None):
+    num_attention_heads = 8
+    sequence_length = 21
+    width = 80
+    src_block_size = 7
+    tgt_block_size = 7
+
+    test_layer = TransformerEncoderBlock(
+        num_attention_heads=num_attention_heads,
+        inner_dim=2048,
+        inner_activation='relu',
+        return_attention_scores=True,
+        src_block_size=src_block_size,
+        tgt_block_size=tgt_block_size,
+        num_kv_heads=num_kv_heads,
+        use_sigmoid_attn=use_sigmoid_attn,
+        sigmoid_attn_bias=-math.log(sequence_length)
+        if use_sigmoid_attn
+        else None,
+    )
+    # Create a 3-dimensional input (the first dimension is implicit).
+    data_tensor = tf_keras.Input(shape=(sequence_length, width))
+    output_tensor = test_layer(data_tensor)
+
+    expected_layer_output_shape = [None, sequence_length, width]
+    expected_attention_scores_shape = [
+        None,
+        num_attention_heads,
+        sequence_length//src_block_size,
+        src_block_size,
+        tgt_block_size,
+    ]
+
+    self.assertIsInstance(output_tensor, tuple)
+    self.assertLen(output_tensor, 2)
+    # First is the standard output.
+    self.assertEqual(
+        output_tensor[0].shape.as_list(), expected_layer_output_shape
+    )
+    # Second is the attention scores.
+    self.assertEqual(
+        output_tensor[1].shape.as_list(), expected_attention_scores_shape
+    )
+
+  @parameterized.named_parameters(
+      ('unshared_kv_projection', False),
+      ('shared_kv_projection', True),
+  )
+  def test_low_rank_attention(self, shared_kv_projection):
+    num_attention_heads = 8
+    sequence_length = 21
+    linformer_dim = 7
+    width = 80
+
+    test_layer = TransformerEncoderBlock(
+        num_attention_heads=num_attention_heads,
+        inner_dim=2048,
+        inner_activation='relu',
+        return_attention_scores=True,
+        linformer_dim=linformer_dim,
+        linformer_shared_kv_projection=shared_kv_projection,
+    )
+    # Create a 3-dimensional input (the first dimension is implicit).
+    data_tensor = tf_keras.Input(shape=(sequence_length, width))
+    output_tensor = test_layer(data_tensor)
+
+    expected_layer_output_shape = [None, sequence_length, width]
+    expected_attention_scores_shape = [
+        None,
+        num_attention_heads,
+        sequence_length,
+        linformer_dim,
+    ]
+
+    self.assertIsInstance(output_tensor, tuple)
+    self.assertLen(output_tensor, 2)
+    # First is the standard output.
+    self.assertEqual(
+        output_tensor[0].shape.as_list(), expected_layer_output_shape
+    )
+    # Second is the attention scores.
+    self.assertEqual(
+        output_tensor[1].shape.as_list(), expected_attention_scores_shape
+    )
 
 
 if __name__ == '__main__':

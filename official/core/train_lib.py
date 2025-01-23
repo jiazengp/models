@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,11 +18,9 @@ import os
 import tempfile
 from typing import Any, List, Mapping, Optional, Tuple
 
-# Import libraries
-
 from absl import logging
 import orbit
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.core import actions
 from official.core import base_task
@@ -252,12 +250,12 @@ class OrbitExperimentRunner:
     )
     return controller
 
-  def run(self) -> Tuple[tf.keras.Model, Mapping[str, Any]]:
+  def run(self) -> Tuple[tf_keras.Model, Mapping[str, Any]]:
     """Run experiments by mode.
 
     Returns:
       A 2-tuple of (model, eval_logs).
-        model: `tf.keras.Model` instance.
+        model: `tf_keras.Model` instance.
         eval_logs: returns eval metrics logs when run_post_eval is set to True,
           otherwise, returns {}.
     """
@@ -300,7 +298,7 @@ class OrbitExperimentRunner:
 
     if self._run_post_eval or mode == 'train_and_post_eval':
       with self.strategy.scope():
-        return self.trainer.model, self.controller.evaluate(
+        return self.trainer.model, self.controller.evaluate(  # pytype: disable=bad-return-type  # always-use-property-annotation
             steps=params.trainer.validation_steps)
     else:
       return self.trainer.model, {}
@@ -321,7 +319,7 @@ def run_experiment(
     summary_manager: Optional[orbit.utils.SummaryManager] = None,
     eval_summary_manager: Optional[orbit.utils.SummaryManager] = None,
     enable_async_checkpointing: bool = False,
-) -> Tuple[tf.keras.Model, Mapping[str, Any]]:
+) -> Tuple[tf_keras.Model, Mapping[str, Any]]:
   """Runs train/eval configured by the experiment params.
 
   Args:
@@ -349,7 +347,7 @@ def run_experiment(
 
   Returns:
     A 2-tuple of (model, eval_logs).
-      model: `tf.keras.Model` instance.
+      model: `tf_keras.Model` instance.
       eval_logs: returns eval metrics logs when run_post_eval is set to True,
         otherwise, returns {}.
   """

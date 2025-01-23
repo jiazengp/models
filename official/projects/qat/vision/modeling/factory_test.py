@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,10 +14,8 @@
 
 """Tests for factory.py."""
 
-# Import libraries
-
 from absl.testing import parameterized
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.projects.qat.vision.configs import common
 from official.projects.qat.vision.modeling import factory as qat_factory
@@ -35,24 +33,34 @@ from official.vision.modeling.heads import dense_prediction_heads
 class ClassificationModelBuilderTest(parameterized.TestCase, tf.test.TestCase):
 
   @parameterized.parameters(
-      ('resnet', (224, 224), 5e-5),
-      ('resnet', (224, 224), None),
-      ('resnet', (None, None), 5e-5),
-      ('resnet', (None, None), None),
-      ('mobilenet', (224, 224), 5e-5),
-      ('mobilenet', (224, 224), None),
-      ('mobilenet', (None, None), 5e-5),
-      ('mobilenet', (None, None), None),
+      ('resnet', 50, (224, 224), 5e-5),
+      ('resnet', 50, (224, 224), None),
+      ('resnet', 50, (None, None), 5e-5),
+      ('resnet', 50, (None, None), None),
+      ('mobilenet', 'MobileNetV2', (224, 224), 5e-5),
+      ('mobilenet', 'MobileNetV2', (224, 224), None),
+      ('mobilenet', 'MobileNetV2', (None, None), 5e-5),
+      ('mobilenet', 'MobileNetV2', (None, None), None),
+      ('mobilenet', 'MobileNetV4ConvLarge', (224, 224), 5e-5),
   )
-  def test_builder(self, backbone_type, input_size, weight_decay):
+  def test_builder(self, backbone_type, model_id, input_size, weight_decay):
     num_classes = 2
-    input_specs = tf.keras.layers.InputSpec(
+    input_specs = tf_keras.layers.InputSpec(
         shape=[None, input_size[0], input_size[1], 3])
+
+    backbone = backbones.Backbone(type=backbone_type)
+    if backbone_type == 'resnet':
+      backbone.resnet.model_id = model_id
+    elif backbone_type == 'mobilenet':
+      backbone.mobilenet.model_id = model_id
+    else:
+      raise ValueError('Unexpected backbone_type', backbone_type)
+
     model_config = classification_cfg.ImageClassificationModel(
-        num_classes=num_classes,
-        backbone=backbones.Backbone(type=backbone_type))
+        num_classes=num_classes, backbone=backbone
+    )
     l2_regularizer = (
-        tf.keras.regularizers.l2(weight_decay) if weight_decay else None)
+        tf_keras.regularizers.l2(weight_decay) if weight_decay else None)
     model = factory.build_classification_model(
         input_specs=input_specs,
         model_config=model_config,
@@ -82,7 +90,7 @@ class RetinaNetBuilderTest(parameterized.TestCase, tf.test.TestCase):
                    quantize_detection_head,
                    quantize_detection_decoder):
     num_classes = 2
-    input_specs = tf.keras.layers.InputSpec(
+    input_specs = tf_keras.layers.InputSpec(
         shape=[None, input_size[0], input_size[1], 3])
 
     if backbone_type == 'spinenet_mobile':
@@ -126,7 +134,7 @@ class RetinaNetBuilderTest(parameterized.TestCase, tf.test.TestCase):
             attribute_heads=None,
             use_separable_conv=True))
 
-    l2_regularizer = tf.keras.regularizers.l2(5e-5)
+    l2_regularizer = tf_keras.regularizers.l2(5e-5)
     # Build the original float32 retinanet model.
     model = factory.build_retinanet(
         input_specs=input_specs,
@@ -171,7 +179,7 @@ class SegmentationModelBuilderTest(parameterized.TestCase, tf.test.TestCase):
       ('mobilenet', (512, 512), 5e-5),)
   def test_deeplabv3_builder(self, backbone_type, input_size, weight_decay):
     num_classes = 21
-    input_specs = tf.keras.layers.InputSpec(
+    input_specs = tf_keras.layers.InputSpec(
         shape=[None, input_size[0], input_size[1], 3])
     model_config = semantic_segmentation_cfg.SemanticSegmentationModel(
         num_classes=num_classes,
@@ -194,7 +202,7 @@ class SegmentationModelBuilderTest(parameterized.TestCase, tf.test.TestCase):
             upsample_factor=2,
             use_depthwise_convolution=True))
     l2_regularizer = (
-        tf.keras.regularizers.l2(weight_decay) if weight_decay else None)
+        tf_keras.regularizers.l2(weight_decay) if weight_decay else None)
     model = factory.build_segmentation_model(
         input_specs=input_specs,
         model_config=model_config,
@@ -207,7 +215,7 @@ class SegmentationModelBuilderTest(parameterized.TestCase, tf.test.TestCase):
       ('mobilenet', (512, 1024), 5e-5),)
   def test_deeplabv3plus_builder(self, backbone_type, input_size, weight_decay):
     num_classes = 19
-    input_specs = tf.keras.layers.InputSpec(
+    input_specs = tf_keras.layers.InputSpec(
         shape=[None, input_size[0], input_size[1], 3])
     model_config = semantic_segmentation_cfg.SemanticSegmentationModel(
         num_classes=num_classes,
@@ -238,7 +246,7 @@ class SegmentationModelBuilderTest(parameterized.TestCase, tf.test.TestCase):
             upsample_factor=1,
             num_filters=256))
     l2_regularizer = (
-        tf.keras.regularizers.l2(weight_decay) if weight_decay else None)
+        tf_keras.regularizers.l2(weight_decay) if weight_decay else None)
     model = factory.build_segmentation_model(
         input_specs=input_specs,
         model_config=model_config,

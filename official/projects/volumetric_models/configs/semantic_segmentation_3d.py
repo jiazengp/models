@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -65,12 +65,22 @@ class SemanticSegmentationModel3D(hyperparams.Config):
   input_size: List[int] = dataclasses.field(default_factory=list)
   min_level: int = 3
   max_level: int = 6
-  head: SegmentationHead3D = SegmentationHead3D()
-  backbone: backbones.Backbone = backbones.Backbone(
-      type='unet_3d', unet_3d=backbones.UNet3D())
-  decoder: decoders.Decoder = decoders.Decoder(
-      type='unet_3d_decoder', unet_3d_decoder=decoders.UNet3DDecoder())
-  norm_activation: common.NormActivation = common.NormActivation()
+  head: SegmentationHead3D = dataclasses.field(
+      default_factory=SegmentationHead3D
+  )
+  backbone: backbones.Backbone = dataclasses.field(
+      default_factory=lambda: backbones.Backbone(  # pylint: disable=g-long-lambda
+          type='unet_3d', unet_3d=backbones.UNet3D()
+      )
+  )
+  decoder: decoders.Decoder = dataclasses.field(
+      default_factory=lambda: decoders.Decoder(  # pylint: disable=g-long-lambda
+          type='unet_3d_decoder', unet_3d_decoder=decoders.UNet3DDecoder()
+      )
+  )
+  norm_activation: common.NormActivation = dataclasses.field(
+      default_factory=common.NormActivation
+  )
 
 
 @dataclasses.dataclass
@@ -88,11 +98,17 @@ class Evaluation(hyperparams.Config):
 @dataclasses.dataclass
 class SemanticSegmentation3DTask(cfg.TaskConfig):
   """The model config."""
-  model: SemanticSegmentationModel3D = SemanticSegmentationModel3D()
-  train_data: DataConfig = DataConfig(is_training=True)
-  validation_data: DataConfig = DataConfig(is_training=False)
-  losses: Losses = Losses()
-  evaluation: Evaluation = Evaluation()
+  model: SemanticSegmentationModel3D = dataclasses.field(
+      default_factory=SemanticSegmentationModel3D
+  )
+  train_data: DataConfig = dataclasses.field(
+      default_factory=lambda: DataConfig(is_training=True)
+  )
+  validation_data: DataConfig = dataclasses.field(
+      default_factory=lambda: DataConfig(is_training=False)
+  )
+  losses: Losses = dataclasses.field(default_factory=Losses)
+  evaluation: Evaluation = dataclasses.field(default_factory=Evaluation)
   train_input_partition_dims: List[int] = dataclasses.field(
       default_factory=list)
   eval_input_partition_dims: List[int] = dataclasses.field(default_factory=list)

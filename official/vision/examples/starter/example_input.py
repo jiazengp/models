@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,8 +19,7 @@ loading standard tf.Example data but non-standard tf.Example or other data
 format can be supported by implementing proper decoder and parser.
 """
 from typing import Mapping, List, Tuple
-# Import libraries
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.vision.dataloaders import decoder
 from official.vision.dataloaders import parser

@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,13 +15,12 @@
 """XLNet classification finetuning runner in tf2.0."""
 
 import functools
-# Import libraries
 from absl import app
 from absl import flags
 from absl import logging
 
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 # pylint: disable=unused-import
 from official.common import distribute_utils
 from official.legacy.xlnet import common_flags
@@ -123,7 +122,7 @@ def run_evaluation(strategy,
 
 
 def get_metric_fn():
-  train_acc_metric = tf.keras.metrics.SparseCategoricalAccuracy(
+  train_acc_metric = tf_keras.metrics.SparseCategoricalAccuracy(
       "acc", dtype=tf.float32)
   return train_acc_metric
 

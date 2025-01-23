@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import orbit
 
 from seqeval import metrics as seqeval_metrics
 
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.core import base_task
 from official.core import config_definitions as cfg
@@ -35,7 +35,7 @@ from official.nlp.tasks import utils
 @dataclasses.dataclass
 class ModelConfig(base_config.Config):
   """A base span labeler configuration."""
-  encoder: encoders.EncoderConfig = encoders.EncoderConfig()
+  encoder: encoders.EncoderConfig = dataclasses.field(default_factory=encoders.EncoderConfig)
   head_dropout: float = 0.1
   head_initializer_range: float = 0.02
 
@@ -46,7 +46,7 @@ class TaggingConfig(cfg.TaskConfig):
   # At most one of `init_checkpoint` and `hub_module_url` can be specified.
   init_checkpoint: str = ''
   hub_module_url: str = ''
-  model: ModelConfig = ModelConfig()
+  model: ModelConfig = dataclasses.field(default_factory=ModelConfig)
 
   # The real class names, the order of which should match real label id.
   # Note that a word may be tokenized into multiple word_pieces tokens, and
@@ -54,8 +54,8 @@ class TaggingConfig(cfg.TaskConfig):
   # of the word, and a negative label id is assigned to the remaining tokens.
   # The negative label id will not contribute to loss and metrics.
   class_names: Optional[List[str]] = None
-  train_data: cfg.DataConfig = cfg.DataConfig()
-  validation_data: cfg.DataConfig = cfg.DataConfig()
+  train_data: cfg.DataConfig = dataclasses.field(default_factory=cfg.DataConfig)
+  validation_data: cfg.DataConfig = dataclasses.field(default_factory=cfg.DataConfig)
 
 
 def _masked_labels_and_weights(y_true):
@@ -95,7 +95,7 @@ class TaggingTask(base_task.Task):
     return models.BertTokenClassifier(
         network=encoder_network,
         num_classes=len(self.task_config.class_names),
-        initializer=tf.keras.initializers.TruncatedNormal(
+        initializer=tf_keras.initializers.TruncatedNormal(
             stddev=self.task_config.model.head_initializer_range),
         dropout_rate=self.task_config.model.head_dropout,
         output='logits',
@@ -104,7 +104,7 @@ class TaggingTask(base_task.Task):
   def build_losses(self, labels, model_outputs, aux_losses=None) -> tf.Tensor:
     logits = tf.cast(model_outputs['logits'], tf.float32)
     masked_labels, masked_weights = _masked_labels_and_weights(labels)
-    loss = tf.keras.losses.sparse_categorical_crossentropy(
+    loss = tf_keras.losses.sparse_categorical_crossentropy(
         masked_labels, logits, from_logits=True)
     numerator_loss = tf.reduce_sum(loss * masked_weights)
     denominator_loss = tf.reduce_sum(masked_weights)
@@ -138,13 +138,13 @@ class TaggingTask(base_task.Task):
 
     return data_loader_factory.get_data_loader(params).load(input_context)
 
-  def inference_step(self, inputs, model: tf.keras.Model):
+  def inference_step(self, inputs, model: tf_keras.Model):
     """Performs the forward step."""
     logits = model(inputs, training=False)['logits']
     return {'logits': logits,
             'predict_ids': tf.argmax(logits, axis=-1, output_type=tf.int32)}
 
-  def validation_step(self, inputs, model: tf.keras.Model, metrics=None):
+  def validation_step(self, inputs, model: tf_keras.Model, metrics=None):
     """Validatation step.
 
     Args:
@@ -207,7 +207,7 @@ class TaggingTask(base_task.Task):
 
 def predict(task: TaggingTask,
             params: cfg.DataConfig,
-            model: tf.keras.Model) -> List[Tuple[int, int, List[int]]]:
+            model: tf_keras.Model) -> List[Tuple[int, int, List[int]]]:
   """Predicts on the input data.
 
   Args:

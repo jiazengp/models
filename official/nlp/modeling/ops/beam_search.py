@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 """Beam search to find the translated sequence with the highest probability."""
 
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 
 def inf(dtype):
@@ -69,6 +69,9 @@ class _StateKeys(object):
   # At the beginning, all of the sequences in FINISHED_SEQ are filler values.
   # True -> finished sequence, False -> filler. Shape [batch_size, beam_size]
   FINISHED_FLAGS = "FINISHED_FLAGS"
+  # for prefix matching hack. The BS will only constraint the next token to
+  # where the mask is 1.
+  CONSTRAINT_MASK = "CONSTRAINT_MASK"
 
 
 def _expand_to_same_rank(tensor, target):
@@ -128,7 +131,7 @@ class SequenceBeamSearch(tf.Module):
       alpha: A float, defining the strength of length normalization.
       max_decode_length: An integer, the maximum number of steps to decode a
         sequence.
-      eos_id: An integer. ID of end of sentence token.
+      eos_id: An integer or a list. ID of end of sentence token.
       padded_decode: A bool, indicating if max_sequence_length padding is used
         for beam search.
       dtype: A tensorflow data type used for score computation. The default is
@@ -141,13 +144,16 @@ class SequenceBeamSearch(tf.Module):
     self.beam_size = beam_size
     self.alpha = alpha
     self.max_decode_length = max_decode_length
-    self.eos_id = eos_id
+    if isinstance(eos_id, list):
+      self.eos_id = eos_id
+    else:
+      self.eos_id = [eos_id]
     self.padded_decode = padded_decode
     self.dtype = tf.as_dtype(dtype)
     self.decoding_name = decoding_name
     self.noise_multiplier = noise_multiplier
 
-  def search(self, initial_ids, initial_cache):
+  def search(self, initial_ids, initial_cache, constraint_mask=None):
     """Beam search for sequences with highest scores.
 
     Args:
@@ -155,6 +161,9 @@ class SequenceBeamSearch(tf.Module):
         with shape [batch_size, 1]
       initial_cache: dictionary storing values to be passed into the
         symbols_to_logits_fn.
+      constraint_mask: a [vocab_size] tensor, with 1 represent prefix. During
+        autoregressive decoding, the first token should be among where the
+        constraint_mask is 1.
 
     Returns:
       finished_seq and finished_scores.
@@ -162,8 +171,9 @@ class SequenceBeamSearch(tf.Module):
     batch_size = (
         initial_ids.shape.as_list()[0]
         if self.padded_decode else tf.shape(initial_ids)[0])
-    state, state_shapes = self._create_initial_state(initial_ids, initial_cache,
-                                                     batch_size)
+    state, state_shapes = self._create_initial_state(
+        initial_ids, initial_cache, batch_size, constraint_mask=constraint_mask
+    )
 
     def _grow_alive_seq(state):
       """Grow alive sequences by one token, collect top 2*beam_size sequences.
@@ -200,6 +210,21 @@ class SequenceBeamSearch(tf.Module):
 
       flat_logits, flat_cache = self.symbols_to_logits_fn(
           flat_ids, i, flat_cache)
+
+      if _StateKeys.CONSTRAINT_MASK in state:
+        constraint_mask = state[_StateKeys.CONSTRAINT_MASK]
+        constraint_mask = tf.cond(
+            tf.equal(i, 0),
+            lambda: constraint_mask,
+            lambda: tf.ones_like(constraint_mask),
+        )
+        penalty = tf.cast(
+            tf.cast(constraint_mask != 1, tf.int32) * 999_999_999,
+            flat_logits.dtype,
+        )
+        flat_logits = flat_logits - penalty[tf.newaxis, :]
+      else:
+        constraint_mask = None
 
       if self.noise_multiplier > 0:
         noise = tf.random.uniform(flat_logits.shape, dtype=flat_logits.dtype)
@@ -247,7 +272,7 @@ class SequenceBeamSearch(tf.Module):
       else:
         topk_seq = tf.concat(
             [topk_seq, tf.expand_dims(topk_ids, axis=2)], axis=2)
-      return topk_seq, topk_log_probs, topk_ids, new_cache
+      return topk_seq, topk_log_probs, topk_ids, new_cache, constraint_mask
 
     def _get_new_alive_state(new_seq, new_log_probs, new_finished_flags,
                              new_cache):
@@ -360,8 +385,15 @@ class SequenceBeamSearch(tf.Module):
         new state dictionary.
       """
       # Grow alive sequences by one token.
-      new_seq, new_log_probs, topk_ids, new_cache = _grow_alive_seq(state)
-      new_finished_flags = tf.equal(topk_ids, self.eos_id)
+      new_seq, new_log_probs, topk_ids, new_cache, constraint_mask = (
+          _grow_alive_seq(state)
+      )
+      new_finished_flags = tf.equal(topk_ids, self.eos_id[0])
+      for eos_id in self.eos_id[1:]:
+        one_finished_flags = tf.equal(topk_ids, eos_id)
+        new_finished_flags = tf.logical_or(
+            new_finished_flags, one_finished_flags
+        )
       # Collect top beam_size alive sequences
       alive_state = _get_new_alive_state(new_seq, new_log_probs,
                                          new_finished_flags, new_cache)
@@ -375,6 +407,8 @@ class SequenceBeamSearch(tf.Module):
       new_state = {_StateKeys.CUR_INDEX: state[_StateKeys.CUR_INDEX] + 1}
       new_state.update(alive_state)
       new_state.update(finished_state)
+      if constraint_mask is not None:
+        new_state[_StateKeys.CONSTRAINT_MASK] = constraint_mask
       return [new_state]
 
     finished_state = tf.nest.map_structure(
@@ -407,7 +441,9 @@ class SequenceBeamSearch(tf.Module):
     finished_scores = tf.where(score_cond, finished_scores, alive_log_probs)
     return finished_seq, finished_scores
 
-  def _create_initial_state(self, initial_ids, initial_cache, batch_size):
+  def _create_initial_state(
+      self, initial_ids, initial_cache, batch_size, constraint_mask=None
+  ):
     """Return initial state dictionary and its shape invariants."""
     for key, value in initial_cache.items():
       for inner_value in tf.nest.flatten(value):
@@ -458,6 +494,8 @@ class SequenceBeamSearch(tf.Module):
         _StateKeys.FINISHED_SCORES: finished_scores,
         _StateKeys.FINISHED_FLAGS: finished_flags
     }
+    if constraint_mask is not None:
+      state[_StateKeys.CONSTRAINT_MASK] = constraint_mask
 
     # Create state invariants for each value in the state dictionary. Each
     # dimension must be a constant or None. A None dimension means either:
@@ -501,6 +539,10 @@ class SequenceBeamSearch(tf.Module):
           _StateKeys.FINISHED_FLAGS:
               tf.TensorShape([None, self.beam_size])
       }
+    if constraint_mask is not None:
+      state_shape_invariants[_StateKeys.CONSTRAINT_MASK] = tf.TensorShape(
+          [self.vocab_size]
+      )
 
     return state, state_shape_invariants
 
@@ -579,7 +621,7 @@ class SequenceBeamSearch(tf.Module):
       Nested structure containing tensors with shape
         [batch_size, new_beam_size, ...]
     """
-    # Computes the i'th coodinate that contains the batch index for gather_nd.
+    # Computes the i'th coordinate that contains the batch index for gather_nd.
     # Batch pos is a tensor like [[0,0,0,0,],[1,1,1,1],..].
     batch_pos = tf.range(batch_size * new_beam_size) // new_beam_size
     batch_pos = tf.reshape(batch_pos, [batch_size, new_beam_size])
@@ -606,6 +648,7 @@ def sequence_beam_search(
     dtype="float32",
     noise_multiplier: float = 0.0,
     decoding_name=None,
+    constraint_mask=None,
 ):
   """Search for sequence of subtoken ids with the largest probability.
 
@@ -633,6 +676,8 @@ def sequence_beam_search(
       tf.float32.
     noise_multiplier: The amount of noise.
     decoding_name: an optional name for the decoding loop tensors.
+    constraint_mask: The BS will only constraint the next token to where the
+      mask is 1.
 
   Returns:
     Top decoded sequences [batch_size, beam_size, max_decode_length]
@@ -650,7 +695,7 @@ def sequence_beam_search(
       noise_multiplier,
       decoding_name,
   )
-  return sbs.search(initial_ids, initial_cache)
+  return sbs.search(initial_ids, initial_cache, constraint_mask=constraint_mask)
 
 
 def _log_prob_from_logits(logits):

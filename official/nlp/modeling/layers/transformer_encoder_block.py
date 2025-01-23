@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,21 +13,67 @@
 # limitations under the License.
 
 """Keras-based TransformerEncoder block layer."""
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 from absl import logging
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.modeling import tf_utils
+from official.nlp.modeling.layers import block_sparse_attention
+from official.nlp.modeling.layers import multi_query_attention
 from official.nlp.modeling.layers import util
 
 
-@tf.keras.utils.register_keras_serializable(package="Text")
-class TransformerEncoderBlock(tf.keras.layers.Layer):
+class RMSNorm(tf_keras.layers.Layer):
+  """Root mean square layer normalization layer."""
+
+  def __init__(
+      self,
+      axis: int | Sequence[int] = -1,
+      epsilon: float = 1e-6,
+      **kwargs,
+  ):
+    """Initializes RMSNorm.
+
+    Args:
+      axis: The axis that the input is normalized over.
+      epsilon: A small value added to the mean square for numerical stability.
+      **kwargs: Keyword arguments passed to the base layer.
+    """
+    super().__init__(**kwargs)
+    self.axis = [axis] if isinstance(axis, int) else axis
+    self.epsilon = epsilon
+
+  def build(self, input_shape: tf.TensorShape | Sequence[int | None]):
+    input_shape = tf.TensorShape(input_shape)
+    scale_shape = [1] * input_shape.rank
+    for dim in self.axis:
+      scale_shape[dim] = input_shape[dim]
+    with tf.name_scope(self.name):
+      self.scale = self.add_weight(
+          name="scale",
+          shape=scale_shape,
+          initializer="ones",
+          experimental_autocast=False,
+      )
+    super().build(input_shape)
+
+  def call(self, inputs: tf.Tensor) -> tf.Tensor:
+    input_dtype = inputs.dtype
+    inputs = tf.cast(inputs, tf.float32)
+    var = tf.math.reduce_mean(
+        tf.math.square(inputs), axis=self.axis, keepdims=True
+    )
+    outputs = inputs * tf.math.rsqrt(var + self.epsilon) * self.scale
+    return tf.cast(outputs, input_dtype)
+
+
+@tf_keras.utils.register_keras_serializable(package="Text")
+class TransformerEncoderBlock(tf_keras.layers.Layer):
   """TransformerEncoderBlock layer.
 
   This layer implements the Transformer Encoder from
   "Attention Is All You Need". (https://arxiv.org/abs/1706.03762),
-  which combines a `tf.keras.layers.MultiHeadAttention` layer with a
+  which combines a `tf_keras.layers.MultiHeadAttention` layer with a
   two-layer feedforward network.
 
   References:
@@ -51,6 +97,7 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
                use_bias=True,
                norm_first=False,
                norm_epsilon=1e-12,
+               use_rms_norm=False,
                output_dropout=0.0,
                attention_dropout=0.0,
                inner_dropout=0.0,
@@ -62,6 +109,13 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
                output_last_dim=None,
                diff_q_kv_att_layer_norm=False,
                return_attention_scores=False,
+               num_kv_heads=None,
+               src_block_size=None,
+               tgt_block_size=None,
+               use_sigmoid_attn=False,
+               sigmoid_attn_bias=None,
+               linformer_dim=None,
+               linformer_shared_kv_projection=True,
                **kwargs):
     """Initializes `TransformerEncoderBlock`.
 
@@ -76,7 +130,7 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
     E.g. let's say input dims are `[batch_size, seq_dim, input_last_dim]`.
     Scenario 1: If `output_last_dim` is not `None`, then the output dims of this
     module would be `[batch_size, seq_dim, output_last_dim]`. Note `key_dim` is
-    overriden by `output_last_dim`.
+    overridden by `output_last_dim`.
     Scenario 2: If `output_last_dim` is `None` and `key_dim` is not `None`, then
     the output dims of this module would be `[batch_size, seq_dim, key_dim]`.
     Scenario 3: If the `output_last_dim` and `key_dim` are both `None`, the
@@ -103,6 +157,7 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
         dense layers. If set False, output of attention and intermediate dense
         layers is normalized.
       norm_epsilon: Epsilon value to initialize normalization layers.
+      use_rms_norm: Whether to use RMSNorm instead of LayerNorm.
       output_dropout: Dropout probability for the post-attention and output
         dropout.
       attention_dropout: Dropout probability for within the attention layer.
@@ -114,9 +169,9 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
       attention_axes: axes over which the attention is applied. `None` means
         attention over all axes, but batch, heads, and features.
       use_query_residual: Toggle to execute residual connection after attention.
-      key_dim: `key_dim` for the `tf.keras.layers.MultiHeadAttention`. If
+      key_dim: `key_dim` for the `tf_keras.layers.MultiHeadAttention`. If
         `None`, we use the first `input_shape`'s last dim.
-      value_dim: `value_dim` for the `tf.keras.layers.MultiHeadAttention`.
+      value_dim: `value_dim` for the `tf_keras.layers.MultiHeadAttention`.
       output_last_dim: Final dimension of the output of this module. This also
         dictates the value for the final dimension of the multi-head-attention.
         When it's `None`, we use, in order of decreasing precedence, `key_dim` *
@@ -128,6 +183,20 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
       return_attention_scores: If `True`, the output of this layer will be a
         tuple and additionally contain the attention scores in the shape of
         `[batch_size, num_attention_heads, seq_dim, seq_dim]`.
+      num_kv_heads: Number of key-value heads for multi-query attention. Refer
+        to `multi_query_attention.MultiHeadAttention` for more details.
+      src_block_size: Source block size. Refer to
+        `block_sparse_attention.MultiHeadAttention` for more details.
+      tgt_block_size: Target block size. Refer to
+        `block_sparse_attention.MultiHeadAttention` for more details.
+      use_sigmoid_attn: This param is only used in
+        `block_sparse_attention.MultiHeadAttention`
+      sigmoid_attn_bias: This param is only used in
+        `block_sparse_attention.MultiHeadAttention`
+      linformer_dim: Applies low-rank factorization on keys/values as in
+        https://arxiv.org/pdf/2006.04768.
+      linformer_shared_kv_projection: If set, projection layer is shared for
+        keys and values.
       **kwargs: keyword arguments.
     """
     util.filter_kwargs(kwargs)
@@ -144,16 +213,17 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
     self._attention_dropout_rate = attention_dropout
     self._output_dropout_rate = output_dropout
     self._output_range = output_range
-    self._kernel_initializer = tf.keras.initializers.get(kernel_initializer)
-    self._bias_initializer = tf.keras.initializers.get(bias_initializer)
-    self._kernel_regularizer = tf.keras.regularizers.get(kernel_regularizer)
-    self._bias_regularizer = tf.keras.regularizers.get(bias_regularizer)
-    self._activity_regularizer = tf.keras.regularizers.get(activity_regularizer)
-    self._kernel_constraint = tf.keras.constraints.get(kernel_constraint)
-    self._bias_constraint = tf.keras.constraints.get(bias_constraint)
+    self._kernel_initializer = tf_keras.initializers.get(kernel_initializer)
+    self._bias_initializer = tf_keras.initializers.get(bias_initializer)
+    self._kernel_regularizer = tf_keras.regularizers.get(kernel_regularizer)
+    self._bias_regularizer = tf_keras.regularizers.get(bias_regularizer)
+    self._activity_regularizer = tf_keras.regularizers.get(activity_regularizer)
+    self._kernel_constraint = tf_keras.constraints.get(kernel_constraint)
+    self._bias_constraint = tf_keras.constraints.get(bias_constraint)
     self._use_bias = use_bias
     self._norm_first = norm_first
     self._norm_epsilon = norm_epsilon
+    self._use_rms_norm = use_rms_norm
     self._inner_dropout = inner_dropout
     self._use_query_residual = use_query_residual
     self._key_dim = key_dim
@@ -161,17 +231,37 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
     self._output_last_dim = output_last_dim
     self._diff_q_kv_att_layer_norm = diff_q_kv_att_layer_norm
     self._return_attention_scores = return_attention_scores
+    self._num_kv_heads = num_kv_heads
+    self._src_block_size = src_block_size
+    self._tgt_block_size = tgt_block_size
+    self._use_sigmoid_attn = use_sigmoid_attn
+    self._sigmoid_attn_bias = sigmoid_attn_bias
+    self._linformer_dim = linformer_dim
+    self._linformer_shared_kv_projection = linformer_shared_kv_projection
+    if (
+        self._src_block_size is not None
+        and self._num_kv_heads is not None
+        and self._num_kv_heads != 1
+    ):
+      raise ValueError(
+          "Block sparse attention only supports Multi-query attention.Please"
+          " set num_kv_heads to 1 to enable MQA with block sparse attention."
+      )
     if attention_initializer:
-      self._attention_initializer = tf.keras.initializers.get(
-          attention_initializer)
+      self._attention_initializer = tf_keras.initializers.get(
+          attention_initializer
+      )
     else:
       self._attention_initializer = tf_utils.clone_initializer(
-          self._kernel_initializer)
+          self._kernel_initializer
+      )
     self._attention_axes = attention_axes
 
     if self._diff_q_kv_att_layer_norm and not self._norm_first:
-      raise ValueError("Setting `diff_q_and_kv_attention_layer_norm` to True"
-                       "when `norm_first` is False is invalid.")
+      raise ValueError(
+          "Setting `diff_q_and_kv_attention_layer_norm` to True"
+          "when `norm_first` is False is invalid."
+      )
 
   def build(self, input_shape):
     if isinstance(input_shape, tf.TensorShape):
@@ -197,12 +287,7 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
     else:
       last_output_shape = self._output_last_dim
 
-    common_kwargs = dict(
-        bias_regularizer=self._bias_regularizer,
-        activity_regularizer=self._activity_regularizer,
-        kernel_constraint=self._kernel_constraint,
-        bias_constraint=self._bias_constraint)
-    self._attention_layer = tf.keras.layers.MultiHeadAttention(
+    attention_layer_kwargs = dict(
         num_heads=self._num_heads,
         key_dim=self._key_dim,
         value_dim=self._value_dim,
@@ -213,27 +298,67 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
         attention_axes=self._attention_axes,
         output_shape=self._output_last_dim,
         name="self_attention",
-        **common_kwargs)
-    self._attention_dropout = tf.keras.layers.Dropout(
-        rate=self._attention_dropout_rate)
+    )
+    common_kwargs = dict(
+        bias_regularizer=self._bias_regularizer,
+        activity_regularizer=self._activity_regularizer,
+        kernel_constraint=self._kernel_constraint,
+        bias_constraint=self._bias_constraint,
+    )
+    if self._src_block_size is not None:
+      attention_layer_kwargs.update(
+          src_block_size=self._src_block_size,
+          tgt_block_size=self._tgt_block_size,
+          use_sigmoid_attn=self._use_sigmoid_attn,
+          sigmoid_attn_bias=self._sigmoid_attn_bias,
+          num_kv_heads=self._num_kv_heads,
+          name="block_sparse_attention",
+      )
+      attention_fn = block_sparse_attention.MultiHeadAttention
+    elif self._num_kv_heads is not None:
+      attention_layer_kwargs.update(
+          num_kv_heads=self._num_kv_heads,
+          name="multi_query_attention",
+      )
+      attention_fn = multi_query_attention.MultiHeadAttention
+    else:
+      attention_fn = tf_keras.layers.MultiHeadAttention
+    self._attention_layer = attention_fn(
+        **attention_layer_kwargs, **common_kwargs
+    )
+    self._attention_dropout = tf_keras.layers.Dropout(
+        rate=self._attention_dropout_rate
+    )
     # Use float32 in layernorm for numeric stability.
     # It is probably safe in mixed_float16, but we haven't validated this yet.
-    self._attention_layer_norm = (
-        tf.keras.layers.LayerNormalization(
-            name="self_attention_layer_norm",
-            axis=-1,
-            epsilon=self._norm_epsilon,
-            dtype=tf.float32))
+    if self._use_rms_norm:
+      self._attention_layer_norm = RMSNorm(
+          epsilon=self._norm_epsilon,
+          name="self_attention_layer_norm",
+      )
+    else:
+      self._attention_layer_norm = tf_keras.layers.LayerNormalization(
+          name="self_attention_layer_norm",
+          axis=-1,
+          epsilon=self._norm_epsilon,
+          dtype=tf.float32,
+      )
     self._attention_layer_norm_kv = self._attention_layer_norm
     if self._diff_q_kv_att_layer_norm:
-      self._attention_layer_norm_kv = (
-          tf.keras.layers.LayerNormalization(
-              name="self_attention_layer_norm_kv",
-              axis=-1,
-              epsilon=self._norm_epsilon,
-              dtype=tf.float32))
+      if self._use_rms_norm:
+        self._attention_layer_norm_kv = RMSNorm(
+            epsilon=self._norm_epsilon,
+            name="self_attention_layer_norm_kv",
+        )
+      else:
+        self._attention_layer_norm_kv = tf_keras.layers.LayerNormalization(
+            name="self_attention_layer_norm_kv",
+            axis=-1,
+            epsilon=self._norm_epsilon,
+            dtype=tf.float32,
+        )
 
-    self._intermediate_dense = tf.keras.layers.EinsumDense(
+    self._intermediate_dense = tf_keras.layers.EinsumDense(
         einsum_equation,
         output_shape=(None, self._inner_dim),
         bias_axes="d",
@@ -241,33 +366,50 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
         bias_initializer=tf_utils.clone_initializer(self._bias_initializer),
         name="intermediate",
         **common_kwargs)
-    policy = tf.keras.mixed_precision.global_policy()
+    policy = tf_keras.mixed_precision.global_policy()
     if policy.name == "mixed_bfloat16":
       # bfloat16 causes BERT with the LAMB optimizer to not converge
       # as well, so we use float32.
       # TODO(b/154538392): Investigate this.
       policy = tf.float32
-    self._intermediate_activation_layer = tf.keras.layers.Activation(
+    self._intermediate_activation_layer = tf_keras.layers.Activation(
         self._inner_activation, dtype=policy)
-    self._inner_dropout_layer = tf.keras.layers.Dropout(
+    self._inner_dropout_layer = tf_keras.layers.Dropout(
         rate=self._inner_dropout)
-    self._output_dense = tf.keras.layers.EinsumDense(
+    self._output_dense = tf_keras.layers.EinsumDense(
         einsum_equation,
         output_shape=(None, last_output_shape),
         bias_axes="d",
         name="output",
         kernel_initializer=tf_utils.clone_initializer(self._kernel_initializer),
         bias_initializer=tf_utils.clone_initializer(self._bias_initializer),
-        **common_kwargs)
-    self._output_dropout = tf.keras.layers.Dropout(
-        rate=self._output_dropout_rate)
+        **common_kwargs,
+    )
+    self._output_dropout = tf_keras.layers.Dropout(
+        rate=self._output_dropout_rate
+    )
     # Use float32 in layernorm for numeric stability.
-    self._output_layer_norm = tf.keras.layers.LayerNormalization(
+    self._output_layer_norm = tf_keras.layers.LayerNormalization(
         name="output_layer_norm",
         axis=-1,
         epsilon=self._norm_epsilon,
-        dtype=tf.float32)
-
+        dtype=tf.float32,
+    )
+    if self._linformer_dim is not None:
+      if self._linformer_shared_kv_projection:
+        low_rank_dim = self._linformer_dim
+      else:
+        low_rank_dim = 2 * self._linformer_dim
+      self._lowrank_kv_projection = tf_keras.layers.EinsumDense(
+          "...bc,cd->...bd",
+          output_shape=(None, low_rank_dim),
+          kernel_initializer=tf_utils.clone_initializer(
+              self._kernel_initializer
+          ),
+          bias_initializer=tf_utils.clone_initializer(self._bias_initializer),
+          name="lowrank_kv_projection",
+          **common_kwargs,
+      )
     super().build(input_shape)
 
   def get_config(self):
@@ -312,6 +454,13 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
         "value_dim": self._value_dim,
         "output_last_dim": self._output_last_dim,
         "diff_q_kv_att_layer_norm": self._diff_q_kv_att_layer_norm,
+        "num_kv_heads": self._num_kv_heads,
+        "src_block_size": self._src_block_size,
+        "tgt_block_size": self._tgt_block_size,
+        "use_sigmoid_attn": self._use_sigmoid_attn,
+        "sigmoid_attn_bias": self._sigmoid_attn_bias,
+        "linformer_dim": self._linformer_dim,
+        "linformer_shared_kv_projection": self._linformer_shared_kv_projection,
     }
     base_config = super().get_config()
     return dict(list(base_config.items()) + list(config.items()))
@@ -367,15 +516,41 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
     if key_value is None:
       key_value = input_tensor
 
+    key = key_value
+    value = key_value
+    if self._linformer_dim is not None:
+      if attention_mask is not None:
+        # Applying mask before the low rank factorization so that padding is
+        # accounted for.
+        query_mask = tf.cast(attention_mask[:, :, 0], dtype=target_tensor.dtype)
+        target_tensor = target_tensor * tf.expand_dims(query_mask, axis=-1)
+        key_mask = tf.cast(attention_mask[:, 0, :], dtype=target_tensor.dtype)
+        key_value = key_value * tf.expand_dims(key_mask, axis=-1)
+        attention_mask = None
+      key_value = tf.transpose(key_value, [0, 2, 1])
+      key_value = self._lowrank_kv_projection(key_value)
+      if self._linformer_shared_kv_projection:
+        key_value = tf.transpose(key_value, [0, 2, 1])
+        key = key_value
+        value = key_value
+      else:
+        key = tf.transpose(key_value[:, :, :self._linformer_dim], [0, 2, 1])
+        value = tf.transpose(key_value[:, :, self._linformer_dim:], [0, 2, 1])
     if self._return_attention_scores:
       attention_output, attention_scores = self._attention_layer(
           query=target_tensor,
-          value=key_value,
+          key=key,
+          value=value,
           attention_mask=attention_mask,
-          return_attention_scores=True)
+          return_attention_scores=True,
+      )
     else:
       attention_output = self._attention_layer(
-          query=target_tensor, value=key_value, attention_mask=attention_mask)
+          query=target_tensor,
+          key=key,
+          value=value,
+          attention_mask=attention_mask,
+      )
     attention_output = self._attention_dropout(attention_output)
 
     if self._norm_first:

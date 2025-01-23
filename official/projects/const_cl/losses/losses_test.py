@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 """Tests for losses."""
 
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 from official.projects.const_cl.losses import losses
 
 
@@ -32,8 +32,9 @@ class LossesTest(tf.test.TestCase):
     inputs = tf.concat([inputs1, inputs2], axis=0)
     contrastive_loss_dict = contrastive_loss(inputs)
 
-    self.assertEqual(contrastive_loss_dict['contrastive_accuracy'], 0.5)
-    self.assertEqual(contrastive_loss_dict['loss'], 4.136947)
+    self.assertAlmostEqual(contrastive_loss_dict['contrastive_accuracy'], 0.5)
+    self.assertAlmostEqual(
+        contrastive_loss_dict['loss'].numpy(), 4.136947, places=4)
 
   def test_instance_constrative_loss(self):
     instance_contrastive_loss = losses.InstanceContrastiveLoss(

@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 from typing import Union
 import gin
 import orbit
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 from official.modeling.multitask import base_model
 from official.modeling.multitask import base_trainer
 from official.modeling.multitask import multitask
@@ -29,11 +29,11 @@ class MultiTaskInterleavingTrainer(base_trainer.MultiTaskBaseTrainer):
 
   def __init__(self,
                multi_task: multitask.MultiTask,
-               multi_task_model: Union[tf.keras.Model,
+               multi_task_model: Union[tf_keras.Model,
                                        base_model.MultiTaskBaseModel],
                optimizer: Union[tf.optimizers.Optimizer,
-                                tf.keras.optimizers.experimental.Optimizer,
-                                tf.keras.optimizers.legacy.Optimizer],
+                                tf_keras.optimizers.experimental.Optimizer,
+                                tf_keras.optimizers.legacy.Optimizer],
                task_sampler: sampler.TaskSampler,
                trainer_options=None):
     super().__init__(
@@ -74,12 +74,21 @@ class MultiTaskInterleavingTrainer(base_trainer.MultiTaskBaseTrainer):
     # If the new Keras optimizer is used, we require all model variables are
     # created before the training and let the optimizer to create the slot
     # variable all together.
-    if isinstance(optimizer, tf.keras.optimizers.experimental.Optimizer):
+    if isinstance(optimizer, tf_keras.optimizers.experimental.Optimizer):
       multi_task_model.build()
       optimizer.build(multi_task_model.trainable_variables)
 
   def task_step_counter(self, name):
     return self._task_step_counters[name]
+
+  def _task_train_step(self, name):
+    """Runs one training step and updates counters."""
+    def _step_fn(inputs):
+      self._task_train_step_map[name](inputs)
+      self.global_step.assign_add(1)
+      self.task_step_counter(name).assign_add(1)
+
+    return _step_fn
 
   def train_step(self, iterator_map):
     # Sample one task to train according to a multinomial distribution
@@ -96,9 +105,7 @@ class MultiTaskInterleavingTrainer(base_trainer.MultiTaskBaseTrainer):
       end = cumulative_sample_distribution[idx + 1]
       if rn >= begin and rn < end:
         self._strategy.run(
-            self._task_train_step_map[name], args=(next(iterator_map[name]),))
-        self.global_step.assign_add(1)
-        self.task_step_counter(name).assign_add(1)
+            self._task_train_step(name), args=(next(iterator_map[name]),))
 
   def train_loop_end(self):
     """Record loss and metric values per task."""

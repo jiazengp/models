@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ from typing import List, Optional
 
 from absl import logging
 
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.modeling import optimization
 from official.nlp import optimization as nlp_optimization
@@ -34,7 +34,7 @@ class ViTAdamWConfig(optimization.AdamWeightDecayConfig):
 
 @dataclasses.dataclass
 class OptimizerConfig(optimization.OptimizerConfig):
-  vit_adamw: ViTAdamWConfig = ViTAdamWConfig()
+  vit_adamw: ViTAdamWConfig = dataclasses.field(default_factory=ViTAdamWConfig)
 
 
 @dataclasses.dataclass
@@ -48,7 +48,9 @@ class OptimizationConfig(optimization.OptimizationConfig):
     learning_rate: learning rate oneof config.
     warmup: warmup oneof config.
   """
-  optimizer: OptimizerConfig = OptimizerConfig()
+  optimizer: OptimizerConfig = dataclasses.field(
+      default_factory=OptimizerConfig
+  )
 
 
 # TODO(frederickliu): figure out how to make this configuable.
@@ -92,13 +94,17 @@ class _ViTAdamW(nlp_optimization.AdamWeightDecay):
         and self._vars_substr is not None
         and self._layers_idx is not None
     ):
+      is_decayed = False
       for var_substr, idx in zip(self._vars_substr, self._layers_idx):
         if var_substr in var.name:
           decay_factor = self._layer_decay ** (self._max_idx - idx)
           lr_t = lr_t * decay_factor
+          is_decayed = True
           logging.debug(
               'Applying layer-wise lr decay: %s: %f', var.name, decay_factor)
           break
+      if not is_decayed:
+        logging.debug('Ignore layer-wise lr decay: %s', var.name)
     decay = self._decay_weights_op(var, lr_t, apply_state)
     with tf.control_dependencies([decay]):
       var_device, var_dtype = var.device, var.dtype.base_dtype
@@ -155,13 +161,17 @@ class _ViTAdamW(nlp_optimization.AdamWeightDecay):
         and self._vars_substr is not None
         and self._layers_idx is not None
     ):
+      is_decayed = False
       for var_substr, idx in zip(self._vars_substr, self._layers_idx):
         if var_substr in var.name:
           decay_factor = self._layer_decay ** (self._max_idx - idx)
           lr_t = lr_t * decay_factor
+          is_decayed = True
           logging.debug(
               'Applying layer-wise lr decay: %s: %f', var.name, decay_factor)
           break
+      if not is_decayed:
+        logging.debug('Ignore layer-wise lr decay: %s', var.name)
     decay = self._decay_weights_op(var, lr_t, apply_state)
     with tf.control_dependencies([decay]):
       var_device, var_dtype = var.device, var.dtype.base_dtype

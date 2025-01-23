@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,10 +14,9 @@
 
 """Panoptic Deeplab configuration definition."""
 import dataclasses
+import math
 import os
 from typing import List, Optional, Union
-
-import numpy as np
 
 from official.core import config_definitions as cfg
 from official.core import exp_factory
@@ -45,7 +44,9 @@ class Parser(hyperparams.Config):
   aug_scale_min: float = 1.0
   aug_scale_max: float = 1.0
   aug_rand_hflip: bool = True
-  aug_type: common.Augmentation = common.Augmentation()
+  aug_type: common.Augmentation = dataclasses.field(
+      default_factory=common.Augmentation
+  )
   sigma: float = 8.0
   small_instance_area_threshold: int = 4096
   small_instance_weight: float = 3.0
@@ -62,14 +63,16 @@ class TfExampleDecoder(common.TfExampleDecoder):
 @dataclasses.dataclass
 class DataDecoder(common.DataDecoder):
   """Data decoder config."""
-  simple_decoder: TfExampleDecoder = TfExampleDecoder()
+  simple_decoder: TfExampleDecoder = dataclasses.field(
+      default_factory=TfExampleDecoder
+  )
 
 
 @dataclasses.dataclass
 class DataConfig(cfg.DataConfig):
   """Input config for training."""
-  decoder: DataDecoder = DataDecoder()
-  parser: Parser = Parser()
+  decoder: DataDecoder = dataclasses.field(default_factory=DataDecoder)
+  parser: Parser = dataclasses.field(default_factory=Parser)
   input_path: str = ''
   drop_remainder: bool = True
   file_type: str = 'tfrecord'
@@ -126,16 +129,26 @@ class PanopticDeeplab(hyperparams.Config):
   input_size: List[int] = dataclasses.field(default_factory=list)
   min_level: int = 3
   max_level: int = 6
-  norm_activation: common.NormActivation = common.NormActivation()
-  backbone: backbones.Backbone = backbones.Backbone(
-      type='resnet', resnet=backbones.ResNet())
-  decoder: decoders.Decoder = decoders.Decoder(
-      type='aspp', aspp=decoders.ASPP(level=3))
-  semantic_head: SemanticHead = SemanticHead()
-  instance_head: InstanceHead = InstanceHead()
+  norm_activation: common.NormActivation = dataclasses.field(
+      default_factory=common.NormActivation
+  )
+  backbone: backbones.Backbone = dataclasses.field(
+      default_factory=lambda: backbones.Backbone(
+          type='resnet', resnet=backbones.ResNet()
+      )
+  )
+  decoder: decoders.Decoder = dataclasses.field(
+      default_factory=lambda: decoders.Decoder(
+          type='aspp', aspp=decoders.ASPP(level=3)
+      )
+  )
+  semantic_head: SemanticHead = dataclasses.field(default_factory=SemanticHead)
+  instance_head: InstanceHead = dataclasses.field(default_factory=InstanceHead)
   shared_decoder: bool = False
   generate_panoptic_masks: bool = True
-  post_processor: PanopticDeeplabPostProcessor = PanopticDeeplabPostProcessor()
+  post_processor: PanopticDeeplabPostProcessor = dataclasses.field(
+      default_factory=PanopticDeeplabPostProcessor
+  )
 
 
 @dataclasses.dataclass
@@ -168,16 +181,20 @@ class Evaluation(hyperparams.Config):
 @dataclasses.dataclass
 class PanopticDeeplabTask(cfg.TaskConfig):
   """Panoptic deeplab task config."""
-  model: PanopticDeeplab = PanopticDeeplab()
-  train_data: DataConfig = DataConfig(is_training=True)
-  validation_data: DataConfig = DataConfig(
-      is_training=False,
-      drop_remainder=False)
-  losses: Losses = Losses()
+  model: PanopticDeeplab = dataclasses.field(default_factory=PanopticDeeplab)
+  train_data: DataConfig = dataclasses.field(
+      default_factory=lambda: DataConfig(is_training=True)
+  )
+  validation_data: DataConfig = dataclasses.field(
+      default_factory=lambda: DataConfig(  # pylint: disable=g-long-lambda
+          is_training=False, drop_remainder=False
+      )
+  )
+  losses: Losses = dataclasses.field(default_factory=Losses)
   init_checkpoint: Optional[str] = None
   init_checkpoint_modules: Union[
       str, List[str]] = 'all'  # all, backbone, and/or decoder
-  evaluation: Evaluation = Evaluation()
+  evaluation: Evaluation = dataclasses.field(default_factory=Evaluation)
 
 
 @exp_factory.register_config_factory('panoptic_deeplab_resnet_coco')
@@ -202,7 +219,7 @@ def panoptic_deeplab_resnet_coco() -> cfg.ExperimentConfig:
   aspp_dilation_rates = [6, 12, 18]
   multigrid = [1, 2, 4]
   stem_type = 'v1'
-  level = int(np.math.log2(output_stride))
+  level = int(math.log2(output_stride))
 
   config = cfg.ExperimentConfig(
       runtime=cfg.RuntimeConfig(
@@ -367,7 +384,7 @@ def panoptic_deeplab_mobilenetv3_large_coco() -> cfg.ExperimentConfig:
   input_size = [640, 640, 3]
   output_stride = 16
   aspp_dilation_rates = [6, 12, 18]
-  level = int(np.math.log2(output_stride))
+  level = int(math.log2(output_stride))
 
   config = cfg.ExperimentConfig(
       runtime=cfg.RuntimeConfig(
@@ -529,7 +546,7 @@ def panoptic_deeplab_mobilenetv3_small_coco() -> cfg.ExperimentConfig:
   input_size = [640, 640, 3]
   output_stride = 16
   aspp_dilation_rates = [6, 12, 18]
-  level = int(np.math.log2(output_stride))
+  level = int(math.log2(output_stride))
 
   config = cfg.ExperimentConfig(
       runtime=cfg.RuntimeConfig(

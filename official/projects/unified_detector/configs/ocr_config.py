@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ from official.modeling import optimization
 
 @dataclasses.dataclass
 class OcrTaskConfig(cfg.TaskConfig):
-  train_data: cfg.DataConfig = cfg.DataConfig()
+  train_data: cfg.DataConfig = dataclasses.field(default_factory=cfg.DataConfig)
   model_call_needs_labels: bool = False
 
 

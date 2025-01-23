@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ from official.modeling.privacy import configs as dp_configs
 class TaskRoutine(hyperparams.Config):
   # TODO(hongkuny): deprecate the task_name once we migrated client code.
   task_name: str = ""
-  task_config: cfg.TaskConfig = None
+  task_config: cfg.TaskConfig | None = None
   eval_steps: Optional[int] = None
   task_weight: Optional[float] = 1.0
 
@@ -33,7 +33,7 @@ class TaskRoutine(hyperparams.Config):
 @dataclasses.dataclass
 class MultiTaskConfig(hyperparams.Config):
   init_checkpoint: str = ""
-  model: hyperparams.Config = None
+  model: hyperparams.Config | None = None
   task_routines: Tuple[TaskRoutine, ...] = ()
   # Configs for differential privacy
   # These configs are only effective if you use create_optimizer in
@@ -57,23 +57,35 @@ class AnnealingSampleConfig(hyperparams.Config):
 @dataclasses.dataclass
 class TaskSamplingConfig(hyperparams.OneOfConfig):
   type: str = ""
-  uniform: hyperparams.Config = hyperparams.Config()
-  proportional: ProportionalSampleConfig = ProportionalSampleConfig()
-  annealing: AnnealingSampleConfig = AnnealingSampleConfig()
+  uniform: hyperparams.Config = dataclasses.field(
+      default_factory=hyperparams.Config
+  )
+  proportional: ProportionalSampleConfig = dataclasses.field(
+      default_factory=ProportionalSampleConfig
+  )
+  annealing: AnnealingSampleConfig = dataclasses.field(
+      default_factory=AnnealingSampleConfig
+  )
 
 
 @dataclasses.dataclass
 class MultiTaskTrainerConfig(cfg.TrainerConfig):
   trainer_type: str = "interleaving"
-  task_sampler: TaskSamplingConfig = TaskSamplingConfig(type="proportional")
+  task_sampler: TaskSamplingConfig = dataclasses.field(
+      default_factory=lambda: TaskSamplingConfig(type="proportional")
+  )
 
 
 @dataclasses.dataclass
 class MultiTaskExperimentConfig(hyperparams.Config):
   """An experiment config for multi-task training and multi-task evaluation."""
-  task: MultiTaskConfig = MultiTaskConfig()
-  trainer: MultiTaskTrainerConfig = MultiTaskTrainerConfig()
-  runtime: cfg.RuntimeConfig = cfg.RuntimeConfig()
+  task: MultiTaskConfig = dataclasses.field(default_factory=MultiTaskConfig)
+  trainer: MultiTaskTrainerConfig = dataclasses.field(
+      default_factory=MultiTaskTrainerConfig
+  )
+  runtime: cfg.RuntimeConfig = dataclasses.field(
+      default_factory=cfg.RuntimeConfig
+  )
 
 
 @dataclasses.dataclass

@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -56,4 +56,4 @@ class Backbone3D(backbones_3d.Backbone3D):
     resnet_3dy: resnet_3dy backbone config.
   """
   type: str = 'resnet_3dy'
-  resnet_3dy: ResNet3DY = ResNet3DY50()
+  resnet_3dy: ResNet3DY = dataclasses.field(default_factory=ResNet3DY50)

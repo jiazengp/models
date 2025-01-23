@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,7 +37,9 @@ class ClsHeadConfig(base_config.Config):
 @dataclasses.dataclass
 class PretrainerConfig(base_config.Config):
   """Pretrainer configuration."""
-  encoder: encoders.EncoderConfig = encoders.EncoderConfig()
+  encoder: encoders.EncoderConfig = dataclasses.field(
+      default_factory=encoders.EncoderConfig
+  )
   cls_heads: List[ClsHeadConfig] = dataclasses.field(default_factory=list)
   mlm_activation: str = "gelu"
   mlm_initializer_range: float = 0.02

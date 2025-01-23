@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 from absl.testing import parameterized
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.nlp.modeling.layers import rezero_transformer
 
@@ -25,12 +25,12 @@ class TransformerWithReZeroLayerTest(tf.test.TestCase, parameterized.TestCase):
 
   def tearDown(self):
     super(TransformerWithReZeroLayerTest, self).tearDown()
-    tf.keras.mixed_precision.set_global_policy('float32')
+    tf_keras.mixed_precision.set_global_policy('float32')
 
   @parameterized.named_parameters(('no_share_attn_ffn', False),
                                   ('share_attn_ffn', True))
   def test_layer_invocation_with_float16_dtype(self, share_rezero):
-    tf.keras.mixed_precision.set_global_policy('mixed_float16')
+    tf_keras.mixed_precision.set_global_policy('mixed_float16')
     test_layer = rezero_transformer.ReZeroTransformer(
         num_attention_heads=10,
         intermediate_size=2048,
@@ -39,13 +39,13 @@ class TransformerWithReZeroLayerTest(tf.test.TestCase, parameterized.TestCase):
     sequence_length = 21
     width = 80
     # Create a 3-dimensional input (the first dimension is implicit).
-    data_tensor = tf.keras.Input(shape=(sequence_length, width))
+    data_tensor = tf_keras.Input(shape=(sequence_length, width))
     # Create a 2-dimensional input (the first dimension is implicit).
-    mask_tensor = tf.keras.Input(shape=(sequence_length, sequence_length))
+    mask_tensor = tf_keras.Input(shape=(sequence_length, sequence_length))
     output_tensor = test_layer([data_tensor, mask_tensor])
 
     # Create a model from the test layer.
-    model = tf.keras.Model([data_tensor, mask_tensor], output_tensor)
+    model = tf_keras.Model([data_tensor, mask_tensor], output_tensor)
 
     # Invoke the model on test data. We can't validate the output data itself
     # (the NN is too complex) but this will rule out structural runtime errors.
@@ -66,9 +66,9 @@ class TransformerWithReZeroLayerTest(tf.test.TestCase, parameterized.TestCase):
         use_layer_norm=False)
 
     input_length, width = 16, 30
-    input_tensor = tf.keras.Input(shape=(input_length, width))
+    input_tensor = tf_keras.Input(shape=(input_length, width))
     output_tensor = test_layer(input_tensor)
-    model = tf.keras.Model(input_tensor, output_tensor)
+    model = tf_keras.Model(input_tensor, output_tensor)
 
     input_data = np.random.rand(2, input_length, width)
     test_layer._rezero_a.assign(1.0)
@@ -85,9 +85,9 @@ class TransformerWithReZeroLayerTest(tf.test.TestCase, parameterized.TestCase):
         use_layer_norm=True)
 
     input_length, width = 16, 30
-    input_tensor = tf.keras.Input(shape=(input_length, width))
+    input_tensor = tf_keras.Input(shape=(input_length, width))
     output_tensor = test_layer(input_tensor)
-    model = tf.keras.Model(input_tensor, output_tensor)
+    model = tf_keras.Model(input_tensor, output_tensor)
 
     input_data = np.random.rand(2, input_length, width) + 2.0
     output_data = model.predict(input_data)
@@ -132,7 +132,7 @@ class TransformerWithReZeroLayerTest(tf.test.TestCase, parameterized.TestCase):
         num_attention_heads=2,
         intermediate_size=128,
         intermediate_activation='relu',
-        kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02))
+        kernel_initializer=tf_keras.initializers.TruncatedNormal(stddev=0.02))
     # Forward path.
     q_tensor = tf.zeros([2, 4, 16], dtype=tf.float32)
     kv_tensor = tf.zeros([2, 8, 16], dtype=tf.float32)
@@ -140,6 +140,69 @@ class TransformerWithReZeroLayerTest(tf.test.TestCase, parameterized.TestCase):
     inputs = [q_tensor, kv_tensor, dummy_mask]
     output = test_layer(inputs)
     self.assertEqual(output.shape, q_tensor.shape)
+
+  @parameterized.named_parameters(('_mqa', 1),
+                                  ('_gqa', 5))
+  def test_rezero_with_kv_heads(self, num_kv_heads):
+    tf_keras.mixed_precision.set_global_policy('mixed_float16')
+    test_layer = rezero_transformer.ReZeroTransformer(
+        num_attention_heads=10,
+        intermediate_size=2048,
+        intermediate_activation='relu',
+        num_kv_heads=num_kv_heads,
+        )
+    sequence_length = 21
+    width = 80
+    # Create a 3-dimensional input (the first dimension is implicit).
+    data_tensor = tf_keras.Input(shape=(sequence_length, width))
+    # Create a 2-dimensional input (the first dimension is implicit).
+    mask_tensor = tf_keras.Input(shape=(sequence_length, sequence_length))
+    output_tensor = test_layer([data_tensor, mask_tensor])
+
+    # Create a model from the test layer.
+    model = tf_keras.Model([data_tensor, mask_tensor], output_tensor)
+
+    # Invoke the model on test data. We can't validate the output data itself
+    # (the NN is too complex) but this will rule out structural runtime errors.
+    batch_size = 6
+    input_data = (10 * np.random.random_sample(
+        (batch_size, sequence_length, width)))
+    # The attention mask should be of shape (batch, from_seq_len, to_seq_len),
+    # which here is (batch, sequence_length, sequence_length)
+    mask_data = np.random.randint(
+        2, size=(batch_size, sequence_length, sequence_length))
+    _ = model.predict([input_data, mask_data])
+
+  def test_rezero_with_block_sparse_attention(self):
+    tf_keras.mixed_precision.set_global_policy('mixed_float16')
+    test_layer = rezero_transformer.ReZeroTransformer(
+        num_attention_heads=10,
+        intermediate_size=2048,
+        intermediate_activation='relu',
+        src_block_size=3,
+        tgt_block_size=3,
+        )
+    sequence_length = 21
+    width = 80
+    # Create a 3-dimensional input (the first dimension is implicit).
+    data_tensor = tf_keras.Input(shape=(sequence_length, width))
+    # Create a 2-dimensional input (the first dimension is implicit).
+    mask_tensor = tf_keras.Input(shape=(sequence_length, sequence_length))
+    output_tensor = test_layer([data_tensor, mask_tensor])
+
+    # Create a model from the test layer.
+    model = tf_keras.Model([data_tensor, mask_tensor], output_tensor)
+
+    # Invoke the model on test data. We can't validate the output data itself
+    # (the NN is too complex) but this will rule out structural runtime errors.
+    batch_size = 6
+    input_data = (10 * np.random.random_sample(
+        (batch_size, sequence_length, width)))
+    # The attention mask should be of shape (batch, from_seq_len, to_seq_len),
+    # which here is (batch, sequence_length, sequence_length)
+    mask_data = np.random.randint(
+        2, size=(batch_size, sequence_length, sequence_length))
+    _ = model.predict([input_data, mask_data])
 
 
 if __name__ == '__main__':

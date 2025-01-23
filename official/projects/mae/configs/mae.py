@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,8 +26,10 @@ from official.vision.configs import image_classification
 @dataclasses.dataclass
 class MAEConfig(cfg.TaskConfig):
   """The translation task config."""
-  train_data: cfg.DataConfig = cfg.DataConfig()
-  validation_data: cfg.DataConfig = cfg.DataConfig()
+  train_data: cfg.DataConfig = dataclasses.field(default_factory=cfg.DataConfig)
+  validation_data: cfg.DataConfig = dataclasses.field(
+      default_factory=cfg.DataConfig
+  )
   masking_ratio: float = 0.75
   patch_h: int = 14
   patch_w: int = 14

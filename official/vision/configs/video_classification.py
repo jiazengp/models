@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -59,11 +59,13 @@ class DataConfig(cfg.DataConfig):
   aug_max_aspect_ratio: float = 2.0
   aug_min_area_ratio: float = 0.49
   aug_max_area_ratio: float = 1.0
+  aug_random_rotation: bool = False
   aug_type: Optional[
       common.Augmentation] = None  # AutoAugment and RandAugment.
   mixup_and_cutmix: Optional[common.MixupAndCutmix] = None
   image_field_key: str = 'image/encoded'
   label_field_key: str = 'clip/label/index'
+  input_image_format: str = 'jpeg'
 
 
 def kinetics400(is_training):
@@ -118,10 +120,14 @@ def kinetics700_2020(is_training):
 class VideoClassificationModel(hyperparams.Config):
   """The model config."""
   model_type: str = 'video_classification'
-  backbone: backbones_3d.Backbone3D = backbones_3d.Backbone3D(
-      type='resnet_3d', resnet_3d=backbones_3d.ResNet3D50())
-  norm_activation: common.NormActivation = common.NormActivation(
-      use_sync_bn=False)
+  backbone: backbones_3d.Backbone3D = dataclasses.field(
+      default_factory=lambda: backbones_3d.Backbone3D(  # pylint: disable=g-long-lambda
+          type='resnet_3d', resnet_3d=backbones_3d.ResNet3D50()
+      )
+  )
+  norm_activation: common.NormActivation = dataclasses.field(
+      default_factory=lambda: common.NormActivation(use_sync_bn=False)
+  )
   dropout_rate: float = 0.2
   aggregate_endpoints: bool = False
   require_endpoints: Optional[Tuple[str, ...]] = None
@@ -142,12 +148,19 @@ class Metrics(hyperparams.Config):
 @dataclasses.dataclass
 class VideoClassificationTask(cfg.TaskConfig):
   """The task config."""
-  model: VideoClassificationModel = VideoClassificationModel()
-  train_data: DataConfig = DataConfig(is_training=True, drop_remainder=True)
-  validation_data: DataConfig = DataConfig(
-      is_training=False, drop_remainder=False)
-  losses: Losses = Losses()
-  metrics: Metrics = Metrics()
+  model: VideoClassificationModel = dataclasses.field(
+      default_factory=VideoClassificationModel
+  )
+  train_data: DataConfig = dataclasses.field(
+      default_factory=lambda: DataConfig(is_training=True, drop_remainder=True)
+  )
+  validation_data: DataConfig = dataclasses.field(
+      default_factory=lambda: DataConfig(  # pylint: disable=g-long-lambda
+          is_training=False, drop_remainder=False
+      )
+  )
+  losses: Losses = dataclasses.field(default_factory=Losses)
+  metrics: Metrics = dataclasses.field(default_factory=Metrics)
   init_checkpoint: Optional[str] = None
   init_checkpoint_modules: str = 'all'  # all or backbone
   freeze_backbone: bool = False

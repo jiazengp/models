@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,7 +38,9 @@ class OptimizerConfig(optimization_cfg.OptimizerConfig):
     rmsprop: rmsprop optimizer.
   """
   type: Optional[str] = None
-  sgd_torch: opt_cfg.SGDTorchConfig = opt_cfg.SGDTorchConfig()
+  sgd_torch: opt_cfg.SGDTorchConfig = dataclasses.field(
+      default_factory=opt_cfg.SGDTorchConfig
+  )
 
 
 @dataclasses.dataclass
@@ -53,4 +55,6 @@ class OptimizationConfig(optimization_cfg.OptimizationConfig):
     warmup: warmup oneof config.
   """
   type: Optional[str] = None
-  optimizer: OptimizerConfig = OptimizerConfig()
+  optimizer: OptimizerConfig = dataclasses.field(
+      default_factory=OptimizerConfig
+  )

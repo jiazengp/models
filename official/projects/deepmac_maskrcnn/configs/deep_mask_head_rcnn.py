@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,14 +35,16 @@ class DeepMaskHead(maskrcnn_config.MaskHead):
 
 @dataclasses.dataclass
 class DeepMaskHeadRCNN(maskrcnn_config.MaskRCNN):
-  mask_head: Optional[DeepMaskHead] = DeepMaskHead()
+  mask_head: Optional[DeepMaskHead] = dataclasses.field(
+      default_factory=DeepMaskHead
+  )
   use_gt_boxes_for_masks: bool = False
 
 
 @dataclasses.dataclass
 class DeepMaskHeadRCNNTask(maskrcnn_config.MaskRCNNTask):
   """Configuration for the deep mask head R-CNN task."""
-  model: DeepMaskHeadRCNN = DeepMaskHeadRCNN()
+  model: DeepMaskHeadRCNN = dataclasses.field(default_factory=DeepMaskHeadRCNN)
 
 
 @exp_factory.register_config_factory('deep_mask_head_rcnn_resnetfpn_coco')

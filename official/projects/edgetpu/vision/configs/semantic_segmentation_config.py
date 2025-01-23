@@ -1,4 +1,4 @@
-# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -47,7 +47,9 @@ class Backbone(backbones.Backbone):
     spinenet_seg: spinenet-seg backbone config.
   """
   type: Optional[str] = None
-  mobilenet_edgetpu: MobileNetEdgeTPU = MobileNetEdgeTPU()
+  mobilenet_edgetpu: MobileNetEdgeTPU = dataclasses.field(
+      default_factory=MobileNetEdgeTPU
+  )
 
 
 @dataclasses.dataclass
@@ -55,9 +57,16 @@ class CustomSemanticSegmentationTaskConfig(base_cfg.SemanticSegmentationTask):
   """Same config for custom taks."""
 
   model: Optional[base_cfg.SemanticSegmentationModel] = None
-  train_data: base_cfg.DataConfig = base_cfg.DataConfig(is_training=True)
-  validation_data: base_cfg.DataConfig = base_cfg.DataConfig(is_training=False)
-  evaluation: base_cfg.Evaluation = base_cfg.Evaluation()
+  train_data: base_cfg.DataConfig = dataclasses.field(
+      default_factory=lambda: base_cfg.DataConfig(is_training=True)
+  )
+  validation_data: base_cfg.DataConfig = dataclasses.field(
+      default_factory=lambda: base_cfg.DataConfig(is_training=False)
+  )
+  evaluation: base_cfg.Evaluation = dataclasses.field(
+      default_factory=base_cfg.Evaluation
+  )
+  allow_image_summary: bool = False
 
 
 # ADE 20K Dataset
@@ -68,18 +77,26 @@ ADE20K_INPUT_PATH_BASE = 'gs://**/ADE20K'
 PRETRAINED_CKPT_PATH_BASE = 'gs://**/placeholder_for_edgetpu_models'
 
 BACKBONE_PRETRAINED_CHECKPOINT = {
-    'mobilenet_edgetpu_v2_l':
-        PRETRAINED_CKPT_PATH_BASE +
-        '/pretrained_checkpoints/mobilenet_edgetpu_v2_l/ckpt-171600',
-    'mobilenet_edgetpu_v2_m':
-        PRETRAINED_CKPT_PATH_BASE +
-        '/pretrained_checkpoints/mobilenet_edgetpu_v2_m/ckpt-171600',
-    'mobilenet_edgetpu_v2_s':
-        PRETRAINED_CKPT_PATH_BASE +
-        '/pretrained_checkpoints/mobilenet_edgetpu_v2_s/ckpt-171600',
-    'mobilenet_edgetpu_v2_xs':
-        PRETRAINED_CKPT_PATH_BASE +
-        '/pretrained_checkpoints/mobilenet_edgetpu_v2_xs/ckpt-171600',
+    'mobilenet_edgetpu_v2_l': (
+        PRETRAINED_CKPT_PATH_BASE
+        + '/pretrained_checkpoints/mobilenet_edgetpu_v2_l/ckpt-171600'
+    ),
+    'mobilenet_edgetpu_v2_m': (
+        PRETRAINED_CKPT_PATH_BASE
+        + '/pretrained_checkpoints/mobilenet_edgetpu_v2_m/ckpt-171600'
+    ),
+    'mobilenet_edgetpu_v2_s': (
+        PRETRAINED_CKPT_PATH_BASE
+        + '/pretrained_checkpoints/mobilenet_edgetpu_v2_s/ckpt-171600'
+    ),
+    'mobilenet_edgetpu_v2_xs': (
+        PRETRAINED_CKPT_PATH_BASE
+        + '/pretrained_checkpoints/mobilenet_edgetpu_v2_xs/ckpt-171600'
+    ),
+    'mobilenet_edgetpu_v2_tiny': (
+        PRETRAINED_CKPT_PATH_BASE
+        + '/pretrained_checkpoints/mobilenet_edgetpu_v2_tiny/ckpt-171600'
+    ),
 }
 
 BACKBONE_HEADPOINT = {
@@ -87,6 +104,7 @@ BACKBONE_HEADPOINT = {
     'mobilenet_edgetpu_v2_m': 4,
     'mobilenet_edgetpu_v2_s': 4,
     'mobilenet_edgetpu_v2_xs': 4,
+    'mobilenet_edgetpu_v2_tiny': 4,
 }
 
 BACKBONE_LOWER_FEATURES = {
@@ -94,6 +112,7 @@ BACKBONE_LOWER_FEATURES = {
     'mobilenet_edgetpu_v2_m': 3,
     'mobilenet_edgetpu_v2_s': 3,
     'mobilenet_edgetpu_v2_xs': 3,
+    'mobilenet_edgetpu_v2_tiny': 3,
 }
 
 
@@ -207,7 +226,15 @@ def seg_deeplabv3plus_ade20k(backbone: str):
 
 # Experiment configs for 32 output classes
 @exp_factory.register_config_factory(
-    'deeplabv3plus_mobilenet_edgetpuv2_m_ade20k_32')
+    'deeplabv3plus_mobilenet_edgetpuv2_l_ade20k_32'
+)
+def deeplabv3plus_mobilenet_edgetpuv2_l_ade20k_32() -> cfg.ExperimentConfig:
+  return seg_deeplabv3plus_ade20k_32('mobilenet_edgetpu_v2_l')
+
+
+@exp_factory.register_config_factory(
+    'deeplabv3plus_mobilenet_edgetpuv2_m_ade20k_32'
+)
 def deeplabv3plus_mobilenet_edgetpuv2_m_ade20k_32() -> cfg.ExperimentConfig:
   return seg_deeplabv3plus_ade20k_32('mobilenet_edgetpu_v2_m')
 
@@ -224,23 +251,42 @@ def deeplabv3plus_mobilenet_edgetpuv2_xs_ade20k_32() -> cfg.ExperimentConfig:
   return seg_deeplabv3plus_ade20k_32('mobilenet_edgetpu_v2_xs')
 
 
+@exp_factory.register_config_factory(
+    'deeplabv3plus_mobilenet_edgetpuv2_tiny_ade20k_32'
+)
+def deeplabv3plus_mobilenet_edgetpuv2_tiny_ade20k_32() -> cfg.ExperimentConfig:
+  return seg_deeplabv3plus_ade20k_32('mobilenet_edgetpu_v2_tiny')
+
+
 # Experiment configs for 151 output classes
 @exp_factory.register_config_factory(
-    'deeplabv3plus_mobilenet_edgetpuv2_m_ade20k')
+    'deeplabv3plus_mobilenet_edgetpuv2_l_ade20k'
+)
+def deeplabv3plus_mobilenet_edgetpuv2_l_ade20k() -> cfg.ExperimentConfig:
+  return seg_deeplabv3plus_ade20k('mobilenet_edgetpu_v2_l')
+
+
+@exp_factory.register_config_factory(
+    'deeplabv3plus_mobilenet_edgetpuv2_m_ade20k'
+)
 def deeplabv3plus_mobilenet_edgetpuv2_m_ade20k() -> cfg.ExperimentConfig:
-  config = seg_deeplabv3plus_ade20k('mobilenet_edgetpu_v2_m')
-  return config
+  return seg_deeplabv3plus_ade20k('mobilenet_edgetpu_v2_m')
 
 
 @exp_factory.register_config_factory(
     'deeplabv3plus_mobilenet_edgetpuv2_s_ade20k')
 def deeplabv3plus_mobilenet_edgetpuv2_s_ade20k() -> cfg.ExperimentConfig:
-  config = seg_deeplabv3plus_ade20k('mobilenet_edgetpu_v2_s')
-  return config
+  return seg_deeplabv3plus_ade20k('mobilenet_edgetpu_v2_s')
 
 
 @exp_factory.register_config_factory(
     'deeplabv3plus_mobilenet_edgetpuv2_xs_ade20k')
 def deeplabv3plus_mobilenet_edgetpuv2_xs_ade20k() -> cfg.ExperimentConfig:
-  config = seg_deeplabv3plus_ade20k('mobilenet_edgetpu_v2_xs')
-  return config
+  return seg_deeplabv3plus_ade20k('mobilenet_edgetpu_v2_xs')
+
+
+@exp_factory.register_config_factory(
+    'deeplabv3plus_mobilenet_edgetpuv2_tiny_ade20k'
+)
+def deeplabv3plus_mobilenet_edgetpuv2_tiny_ade20k() -> cfg.ExperimentConfig:
+  return seg_deeplabv3plus_ade20k('mobilenet_edgetpu_v2_tiny')
