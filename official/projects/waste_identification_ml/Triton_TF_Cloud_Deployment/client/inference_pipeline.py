@@ -16,20 +16,26 @@
 
 import os
 import subprocess
+import sys
+
 from absl import app
 from absl import flags
+import big_query_ops
 import cv2
+import feature_extraction
+import ffmpeg_ops
+import mask_bbox_saver
 import numpy as np
+import object_tracking
+import object_tracking_postprocessing
 import pandas as pd
-from official.projects.waste_identification_ml.model_inference import color_and_property_extractor
-from official.projects.waste_identification_ml.Triton_TF_Cloud_Deployment.client import big_query_ops
-from official.projects.waste_identification_ml.Triton_TF_Cloud_Deployment.client import feature_extraction
-from official.projects.waste_identification_ml.Triton_TF_Cloud_Deployment.client import ffmpeg_ops
-from official.projects.waste_identification_ml.Triton_TF_Cloud_Deployment.client import mask_bbox_saver
-from official.projects.waste_identification_ml.Triton_TF_Cloud_Deployment.client import object_tracking
-from official.projects.waste_identification_ml.Triton_TF_Cloud_Deployment.client import object_tracking_postprocessing
-from official.projects.waste_identification_ml.Triton_TF_Cloud_Deployment.client import triton_server_inference
-from official.projects.waste_identification_ml.Triton_TF_Cloud_Deployment.client import utils
+import triton_server_inference
+import utils
+
+sys.path.append(
+    "models/official/projects/waste_identification_ml/model_inference/"
+)
+import color_and_property_extractor  # pylint: disable=g-bad-import-order, g-import-not-at-top
 
 INPUT_DIRECTORY = flags.DEFINE_string(
     "input_directory", None, "The path to the directory containing images."
@@ -389,46 +395,49 @@ def main(_) -> None:
     logger.info("Failed to crop objects.")
     logger.exception("Exception occured:", e)
 
-  try:
-    # Create a big query table to store the aggregated features data.
-    big_query_ops.create_table(
-        PROJECT_ID.value,
-        BQ_DATASET_ID.value,
-        BQ_TABLE_ID.value,
-        overwrite=OVERWRITE.value,
-    )
-    logger.info("Successfully created table.")
-  except (KeyError, IndexError, TypeError, ValueError):
-    logger.info("Issue in creation of table")
-    return
+  if isinstance(agg_features, pd.DataFrame) and not agg_features.empty:
+    try:
+      # Create a big query table to store the aggregated features data.
+      big_query_ops.create_table(
+          PROJECT_ID.value,
+          BQ_DATASET_ID.value,
+          BQ_TABLE_ID.value,
+          overwrite=OVERWRITE.value,
+      )
+      logger.info("Successfully created table.")
+    except (KeyError, IndexError, TypeError, ValueError):
+      logger.info("Issue in creation of table")
+      return
 
-  try:
-    # Ingest the aggregated features data into the big query table.
-    big_query_ops.ingest_data(
-        agg_features, PROJECT_ID.value, BQ_DATASET_ID.value, BQ_TABLE_ID.value
-    )
-    logger.info("Data ingested successfully.")
-  except (KeyError, IndexError, TypeError, ValueError):
-    logger.info("Issue in data ingestion.")
-    return
+    try:
+      # Ingest the aggregated features data into the big query table.
+      big_query_ops.ingest_data(
+          agg_features, PROJECT_ID.value, BQ_DATASET_ID.value, BQ_TABLE_ID.value
+      )
+      logger.info("Data ingested successfully.")
+    except (KeyError, IndexError, TypeError, ValueError):
+      logger.info("Issue in data ingestion.")
+      return
 
-  try:
-    # Move the folders to the destination bucket.
-    commands = [
-        (
-            "gsutil -m cp -r"
-            f" {os.path.basename(input_directory)} {OUTPUT_DIRECTORY.value}"
-        ),
-        f"rm -r {os.path.basename(input_directory)}",
-        f"gsutil -m cp -r {prediction_folder} {OUTPUT_DIRECTORY.value}",
-        f"rm -r {prediction_folder}",
-    ]
+    try:
+      # Move the folders to the destination bucket.
+      commands = [
+          (
+              "gsutil -m cp -r"
+              f" {os.path.basename(input_directory)} {OUTPUT_DIRECTORY.value}"
+          ),
+          f"rm -r {os.path.basename(input_directory)}",
+          f"gsutil -m cp -r {prediction_folder} {OUTPUT_DIRECTORY.value}",
+          f"rm -r {prediction_folder}",
+      ]
 
-    combined_command_3 = " && ".join(commands)
-    subprocess.run(combined_command_3, shell=True, check=True)
-    logger.info("Successfully moved to destination bucket")
-  except (KeyError, IndexError, TypeError, ValueError):
-    logger.info("Issue in moving folders to destination bucket")
+      combined_command_3 = " && ".join(commands)
+      subprocess.run(combined_command_3, shell=True, check=True)
+      logger.info("Successfully moved to destination bucket")
+    except (KeyError, IndexError, TypeError, ValueError):
+      logger.info("Issue in moving folders to destination bucket")
+  else:
+    logger.info("No features to ingest.")
 
 
 if __name__ == "__main__":
