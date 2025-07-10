@@ -19,6 +19,10 @@ from orbit.utils import tpu_summaries
 
 import tensorflow as tf, tf_keras
 
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.tpu import embedding_context_utils as ecu
+# pylint: enable=g-direct-tensorflow-import
+
 
 def create_loop_fn(step_fn):
   """Creates a loop function driven by a Python `while` loop.
@@ -200,7 +204,8 @@ class LoopFnWithSummaries(tpu_summaries.OptionalSummariesFunction):
 
   def __call__(self, iterator, num_steps):
     if tf.summary.should_record_summaries():
-      output = self.with_summaries(iterator, tf.constant(1))
+      with ecu.SequentialEmbeddingContext():
+        output = self.with_summaries(iterator, tf.constant(1))
       num_steps -= 1
     if num_steps >= 1:
       output = self.without_summaries(iterator, num_steps)
